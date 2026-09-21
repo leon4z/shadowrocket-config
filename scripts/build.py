@@ -172,11 +172,21 @@ def substitute_policy(policy: str, group_name, spec, variant: dict) -> str:
 
 
 def transform(upstream: str, spec, variant: dict) -> list[str]:
+    overrides = dict(getattr(spec, "GENERAL_OVERRIDES", None) or {})
+    applied: set[str] = set()
+
+    def pending_general() -> list[str]:
+        """[General] 段里还没被改写的覆盖项，追加到段末。"""
+        return [f"{k} = {v}" for k, v in overrides.items() if k not in applied]
+
     out: list[str] = []
     section = None
     for raw in upstream.split("\n"):
         s = raw.strip()
         if s.startswith("[") and s.endswith("]"):
+            if section == "general":
+                out.extend(pending_general())
+                applied.update(overrides)
             section = s[1:-1].strip().lower()
             out.append(raw)
             if section == "proxy group" and variant["substitute_proxy"]:
@@ -186,6 +196,12 @@ def transform(upstream: str, spec, variant: dict) -> list[str]:
                 out.extend(spec.EXTRA_GROUPS)
             continue
         if s and not s.startswith("#"):
+            if section == "general" and overrides:
+                key = s.split("=", 1)[0].strip()
+                if key in overrides:
+                    out.append(f"{key} = {overrides[key]}")
+                    applied.add(key)
+                    continue
             if section == "proxy group":
                 out.append(tune_group(raw, spec, variant))
                 continue
@@ -193,6 +209,8 @@ def transform(upstream: str, spec, variant: dict) -> list[str]:
                 out.extend(expand_rule(raw, spec, variant))
                 continue
         out.append(raw)
+    if section == "general":
+        out.extend(pending_general())
     return out
 
 
@@ -371,8 +389,12 @@ def main() -> int:
         sections = parse_sections(lines)
 
         # 生成后的自检：不该再有圈X 引用、不该有残留的 raw 规则集地址；
-        # custom 变体不该再有裸 PROXY 策略。
-        # 只看生效行 —— 上游注释里把 raw 地址当例子写着，那些不算。
+        # custom 变体不该再有裸 PROXY 策略；[General] 覆盖要真的生效。
+        for key, val in (getattr(spec, "GENERAL_OVERRIDES", None) or {}).items():
+            want = f"{key} = {val}"
+            if want not in effective(sections.get("general", [])):
+                raise Failure(f"{variant['id']}: [General] 覆盖没生效，期望 {want!r}")
+
         live_rules = effective(sections.get("rule", []))
         leftover = [l for l in live_rules if "/QuantumultX/" in l]
         if leftover:

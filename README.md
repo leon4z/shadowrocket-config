@@ -73,6 +73,14 @@ schwab.com.cn  skytigris.cn  steamconnecttest.com  tigerbbs.cn  zhijianfengyi.cn
 
 另外小火箭版把域名拆到了 `X_Domain.list`（裸域名，带前导点），必须用 `DOMAIN-SET` 引用——只换 `RULE-SET` 那一行会丢掉全部域名规则（Apple 丢 1560 条、China 丢 3689 条、Global 丢 34895 条）。圈X 版里的 15 + 1 条 `HOST-WILDCARD` 在小火箭版没有对应写法，用小火箭原生的 `DOMAIN-WILDCARD` 显式补回来。
 
+### 1b. `[General]` 覆盖：关闭 IPv6
+
+上游是 `ipv6 = true`（同时查 A 和 AAAA 记录），改成 `false`，避免 IPv6 出口不通时走 IPv6 导致连接卡住或分流异常。`prefer-ipv6` 上游本来就是 `false`，不动。
+
+规则写在 `GENERAL_OVERRIDES` 里。上游没有这个键时会追加到 `[General]` 段末，所以不依赖上游一定保留它；生成后有自检确认覆盖真的生效了，没生效就构建失败。
+
+⚠️ 手册的补充值得知道：**即使 `ipv6 = false`，「当本地网络环境支持 IPv6，并且节点域名支持 IPv6 解析，Shadowrocket 也会使用节点的 IPv6 地址进行访问」**。要彻底避免，需要关闭节点域名的 IPv6 解析，或者在 `[Host]` 段给节点域名指定 IPv4 地址。这一层目前没做——如果你发现 IPv6 仍然在走，就是这里。
+
 ### 2. 分组调参
 
 - **所有组的 `tolerance` 统一改成 100**（上游是 0 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。这是 `url-test`「择优」用的参数——所以只作用于上游那 6 个国家组；`select` 不测速、`fallback` 按可用性切换，两者都不涉及，不给它们新增。
