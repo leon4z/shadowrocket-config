@@ -1,0 +1,70 @@
+name: build
+
+# 每天 UTC 23:00（北京 07:00，与上游 johnshall 的发布时刻一致）校验一次，
+# 源文件改动时也立刻跑。校验失败不会发布，release 分支保持上一版可用。
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 校验远程规则集并生成配置
+        run: python3 scripts/build.py --report dist/report.json
+
+      - name: 写入运行摘要
+        if: always()
+        run: python3 scripts/summary.py dist/report.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 发布到 release 分支
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/publish"
+          mkdir -p "$OUT"
+          cd "$OUT"
+          git init -q
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          if git fetch -q --depth 1 origin release:refs/remotes/origin/release 2>/dev/null; then
+            git checkout -q -b release refs/remotes/origin/release
+          else
+            git checkout -q --orphan release
+            git rm -rq --cached . 2>/dev/null || true
+          fi
+
+          cp "$GITHUB_WORKSPACE/dist/Shadowrocket.conf" ./Shadowrocket.conf
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "配置无变化，跳过发布（源哈希未变）"
+            exit 0
+          fi
+
+          git commit -q -m "build: $(date -u +%Y-%m-%dT%H:%M:%SZ) 校验 ${GITHUB_SHA::7}"
+          git push -q origin release
+          echo "已发布到 release 分支"
