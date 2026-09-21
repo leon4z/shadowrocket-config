@@ -101,8 +101,12 @@ RULESET_DIALECT = [
 # 2. 分组调参
 # --------------------------------------------------------------------------- #
 
-# 所有组的 tolerance 统一改成这个值（上游是 0/50/100 混着的）。
-# tolerance 的含义：只有新优胜者的延迟比旧优胜者低出这么多毫秒，才切换节点。
+# 所有组的 tolerance 统一改成这个值（上游是 0 混着的）。
+# tolerance 的含义：只有当新优胜者的延迟比旧优胜者低出这么多毫秒，才切换节点。
+#
+# 只作用于会「择优」的类型（url-test）：上游那 6 个国家组是 url-test，会改成 100。
+# select 类型不测速、fallback 类型按可用性切换，两者都不涉及 tolerance，
+# 所以这里只替换已有的 tolerance，不给它们新增。
 TOLERANCE = 100
 
 # 从分组行里删掉的参数。policy-select-name 是「按名字指定默认选中项」，
@@ -116,19 +120,27 @@ DROP_GROUP_PARAMS = ("policy-select-name",)
 # 把上游指向内置 PROXY 的地方改指向这两个组。底层节点由正则从订阅里筛，
 # 订阅换代不用改配置。
 #
+# 两个组都是 fallback：节点不可用时才切换到下一个可用节点，不追最快。
+# 这里不要配 tolerance —— 手册里 tolerance 是「只有当新优胜者的分数高于
+# 旧优胜者加公差时才换线」，「优胜者」是 url-test 择优的概念；fallback 是按
+# 可用性切换，没有择优比较，配了也是无效参数。
+#
+# 注意 fallback 取的是「筛出来的第一个可用节点」，所以成员顺序即优先级。
+# 用正则筛选时，顺序是订阅里节点的排列顺序，不是人工指定的顺序。
+#
 # 正则都拿本机 115 个真实节点名验证过命中集合：速度 命中 14 个（含另一个
 # 订阅的 4 个 🇸🇬Singapore 0N），稳定 精确命中原来的 3 个。
 
 EXTRA_GROUPS = [
-    "速度 = url-test,"
+    "速度 = fallback,"
     "policy-regex-filter=🇸🇬|SG|Singapore|新加坡|狮城|沪新|京新|深新|杭新|广新"
     "|🇲🇾|Malaysia|马来|马来西亚,"
-    f"interval=600,tolerance={TOLERANCE},timeout=3,"
+    "interval=600,timeout=3,"
     "url=http://www.gstatic.com/generate_204",
 
     "稳定 = fallback,"
     "policy-regex-filter=Grande|GRANDE|BZ-VMess|BZ-VMESS,"
-    f"timeout=5,interval=600,tolerance={TOLERANCE},"
+    "interval=600,timeout=5,"
     "url=http://www.gstatic.com/generate_204",
 ]
 

@@ -69,7 +69,7 @@ schwab.com.cn  skytigris.cn  steamconnecttest.com  tigerbbs.cn  zhijianfengyi.cn
 
 ### 2. 分组调参
 
-- **所有组的 `tolerance` 统一改成 100**（上游是 0 / 50 / 100 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。只有会测速的组有这项，`select` 类型的分组不测速、不涉及。
+- **所有组的 `tolerance` 统一改成 100**（上游是 0 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。这是 `url-test`「择优」用的参数——所以只作用于上游那 6 个国家组；`select` 不测速、`fallback` 按可用性切换，两者都不涉及，不给它们新增。
 - **删掉所有 `policy-select-name`**，回到上游的位置默认机制（`select=0` = 成员列表里的第 1 个）。按名字指定默认项的问题是名字写错了也看不出来，位置默认至少行为一致。
 
 ### 3. 自建组（只用于 `lazy-sr-custom.conf`）
@@ -77,17 +77,22 @@ schwab.com.cn  skytigris.cn  steamconnecttest.com  tigerbbs.cn  zhijianfengyi.cn
 新增两个组，并把上游指向内置 `PROXY` 的地方改指向它们：
 
 ```
-速度 = url-test,policy-regex-filter=🇸🇬|SG|Singapore|新加坡|狮城|沪新|京新|深新|杭新|广新|🇲🇾|Malaysia|马来|马来西亚,interval=600,tolerance=100,timeout=3,url=http://www.gstatic.com/generate_204
-稳定 = fallback,policy-regex-filter=Grande|GRANDE|BZ-VMess|BZ-VMESS,timeout=5,interval=600,tolerance=100,url=http://www.gstatic.com/generate_204
+速度 = fallback,policy-regex-filter=🇸🇬|SG|Singapore|新加坡|狮城|沪新|京新|深新|杭新|广新|🇲🇾|Malaysia|马来|马来西亚,interval=600,timeout=3,url=http://www.gstatic.com/generate_204
+稳定 = fallback,policy-regex-filter=Grande|GRANDE|BZ-VMess|BZ-VMESS,interval=600,timeout=5,url=http://www.gstatic.com/generate_204
 ```
 
 替换规则：**默认把所有 `PROXY` 换成 `速度`，`AI` 和 `谷歌服务` 两处换成 `稳定`**。用模式匹配而不是行号，所以上游以后新增的服务分组只要指向 `PROXY`，会自动一起改。
 
 两条正则都拿本机 115 个真实节点名验证过命中集合：`速度` 命中 14 个（含另一个订阅的 4 个 `🇸🇬Singapore 0N`），`稳定` 精确命中原来的 3 个。
 
-- `速度` 是 `url-test`：组内自动选最快节点。
-- `稳定` 是 `fallback`：按顺序用，当前的不通就换下一个。
-- 上游的 `select` 服务组保持不变——所以「出口类别」是你定的（AI 走稳定、YouTube 走速度），「类别内部」自动。
+**两个组都是 `fallback`，不配 `tolerance`。** `fallback` 的语义是「节点不可用时切到其他可用节点，可用范围由上次测试结果决定」，它按可用性切换、不做择优比较，所以 `tolerance` 对它是无效参数（手册里 `tolerance` 的定义是「只有当新优胜者的分数高于旧优胜者加公差时才换线」，「优胜者」是 `url-test` 的概念）。对比一下：
+
+- `url-test`：自动切换**延迟最低**的节点——会为了快而换线。
+- `fallback`：只在这一档不可用时才换——稳定优先。
+
+⚠️ **`fallback` 取的是「筛出来的第一个可用节点」，所以成员顺序就是优先级。** 用正则筛选时，顺序是订阅里节点的排列顺序，不是人工指定的顺序。如果你希望优先用某几个节点，要么改成显式成员列表（按优先级排列），要么加 `policy-select-name=<节点名>` 指定默认选中项。
+
+上游的 `select` 服务组保持不变——所以「出口类别」是你定的（AI 走稳定、YouTube 走速度），「类别内部」按 `fallback` 的可用性逻辑自动切换。
 
 ⚠️ **`稳定` 组这条正则绑在供应商标签上**（`Grande`、`BZ-VMess`），供应商改名后这个组会变空，AI 和谷歌服务就没有可用出口了。想彻底免疫就换成按地区筛，代价是包含订阅里所有美国节点：
 
