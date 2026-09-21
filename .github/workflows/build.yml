@@ -71,3 +71,16 @@ jobs:
           git push -q origin release
           echo "已发布到 release 分支"
           ls -1 ./*.conf
+
+      - name: 清理 jsDelivr 缓存
+        # jsDelivr 对分支引用有缓存，不清的话镜像最长可能滞后十几小时。
+        # 清失败不影响发布（raw 地址本来就不经过它）。
+        run: |
+          for f in "$GITHUB_WORKSPACE"/dist/*.conf; do
+            n=$(basename "$f")
+            if curl -sf --max-time 30 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@release/${n}" -o /dev/null; then
+              echo "已清理 jsDelivr 缓存: $n"
+            else
+              echo "清理 jsDelivr 缓存失败（不影响发布）: $n"
+            fi
+          done

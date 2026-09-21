@@ -25,6 +25,12 @@ https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr.conf
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr-custom.conf
 ```
 
+> ⚠️ **jsDelivr 对分支引用有缓存**，不清的话镜像可能滞后十几小时。所以流水线在每次发布后会调 `purge.jsdelivr.net` 清这两个文件的缓存。如果你手动改了 release 分支或想立刻生效，可以自己清一次：
+> ```bash
+> curl "https://purge.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr-custom.conf"
+> ```
+> 另外小火箭自己的自动更新间隔是 **1–7 天**（设置 > 自动更新 > 配置 > 更新间隔），所以就算这边每天构建，App 也是按它自己的节奏拉取。
+
 小火箭里：底部「配置」→ 右上「+」→ 粘贴 URL → 下载后长按该配置 → 选中使用。
 
 > ⚠️ 远程配置一旦更新，会**覆盖在 App 内对该配置所做的修改**（手册「更新配置」一节明确写了）。所以这两份配置不要在 App 里改，要改就改本仓库的 `src/overrides.py`。如果你的用法是「在 App 里手动微调」，那应该改用本地配置（见下面「和本地配置的关系」）。
