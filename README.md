@@ -6,28 +6,28 @@
 
 ## 两份配置
 
-| 文件 | 是什么 | 什么时候用 |
+| 文件 | 出口怎么定 | 什么时候用 |
 | --- | --- | --- |
-| `lazy-sr.conf` | 上游原版逻辑，只把规则集换成小火箭方言 | 想完全跟着上游走、出口由首页手动选的场景 |
-| `lazy-sr-custom.conf` | 在上游基础上加了自建的 `速度` / `稳定` 两个组 | 想让 AI/谷歌走美国故障转移组、其余走最快东南亚组 |
+| `Shadowrocket-select.conf` | 上游原版逻辑：服务组都是 `select`，指向内置 `PROXY`，**出口由你在首页手动选** | 想完全跟着上游走、自己控制出口的场景 |
+| `Shadowrocket-fallback.conf` | 服务组指向自建的 `速度` / `稳定` 组，两者都是 `fallback`，**自动故障转移** | 想让 AI/谷歌走美国组、其余走东南亚组，且节点挂了自动切 |
 
 两者除了下面列的差异，其余完全相同（同一份上游、同一套规则集、同样的 tolerance）。
 
 ```
-https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/lazy-sr.conf
-https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/lazy-sr-custom.conf
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket-select.conf
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket-fallback.conf
 ```
 
 国内直连 `raw.githubusercontent.com` 通常不通，用 jsDelivr 镜像（内容相同）：
 
 ```
-https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr.conf
-https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr-custom.conf
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-select.conf
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf
 ```
 
 > ⚠️ **jsDelivr 对分支引用有缓存**，不清的话镜像可能滞后十几小时。所以流水线在每次发布后会调 `purge.jsdelivr.net` 清这两个文件的缓存。如果你手动改了 release 分支或想立刻生效，可以自己清一次：
 > ```bash
-> curl "https://purge.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr-custom.conf"
+> curl "https://purge.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf"
 > ```
 > 另外小火箭自己的自动更新间隔是 **1–7 天**（设置 > 自动更新 > 配置 > 更新间隔），所以就算这边每天构建，App 也是按它自己的节奏拉取。
 
@@ -78,7 +78,7 @@ schwab.com.cn  skytigris.cn  steamconnecttest.com  tigerbbs.cn  zhijianfengyi.cn
 - **所有组的 `tolerance` 统一改成 100**（上游是 0 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。这是 `url-test`「择优」用的参数——所以只作用于上游那 6 个国家组；`select` 不测速、`fallback` 按可用性切换，两者都不涉及，不给它们新增。
 - **删掉所有 `policy-select-name`**，回到上游的位置默认机制（`select=0` = 成员列表里的第 1 个）。按名字指定默认项的问题是名字写错了也看不出来，位置默认至少行为一致。
 
-### 3. 自建组（只用于 `lazy-sr-custom.conf`）
+### 3. 自建组（只用于 `Shadowrocket-fallback.conf`）
 
 新增两个组，并把上游指向内置 `PROXY` 的地方改指向它们：
 
@@ -157,9 +157,9 @@ python3 scripts/build.py --out-dir /tmp/x   # 换输出目录
 | `www.apple.com` | 苹果服务（验证 `DOMAIN-SET` 的 `Apple_Domain.list` 生效） |
 | `www.baidu.com` | DIRECT（验证 `China_Domain.list` 生效） |
 | `www.google.com` | 谷歌服务（验证 Global 之前的规则仍然优先） |
-| `futu.cn` | 速度（`lazy-sr-custom.conf`；这是上面说的那 10 条变化之一） |
+| `futu.cn` | 速度（`Shadowrocket-fallback.conf`；这是上面说的那 10 条变化之一） |
 
-再确认一下 `lazy-sr-custom.conf` 里两个组真的筛到了节点：配置详情 →「代理分组」，看 `速度` 有几个成员、`稳定` 是不是 3 个。
+再确认一下 `Shadowrocket-fallback.conf` 里两个组真的筛到了节点：配置详情 →「代理分组」，看 `速度` 有几个成员、`稳定` 是不是 3 个。
 
 ## 目录结构
 

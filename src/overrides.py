@@ -155,16 +155,19 @@ PROXY_TARGET_PER_GROUP = {
 # --------------------------------------------------------------------------- #
 # 变体
 # --------------------------------------------------------------------------- #
+# 两份配置的差别是「出口怎么定」，文件名按这个机制命名：
+#   select   —— 服务组是 select 类型，指向内置 PROXY，出口由你在首页手动选
+#   fallback —— 服务组指向自建的 速度/稳定 组，两者都是 fallback，自动故障转移
 
 VARIANTS = [
     {
-        "id": "lazy-sr",
-        "title": "上游原版逻辑 + 小火箭规则集",
+        "id": "Shadowrocket-select",
+        "title": "上游原版逻辑 · 出口在首页手动选（PROXY）",
         "substitute_proxy": False,
     },
     {
-        "id": "lazy-sr-custom",
-        "title": "自建速度/稳定组 + 小火箭规则集",
+        "id": "Shadowrocket-fallback",
+        "title": "自建速度/稳定组 · 自动故障转移（fallback）",
         "substitute_proxy": True,
     },
 ]
