@@ -78,6 +78,36 @@ schwab.com.cn  skytigris.cn  steamconnecttest.com  tigerbbs.cn  zhijianfengyi.cn
 - **所有组的 `tolerance` 统一改成 100**（上游是 0 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。这是 `url-test`「择优」用的参数——所以只作用于上游那 6 个国家组；`select` 不测速、`fallback` 按可用性切换，两者都不涉及，不给它们新增。
 - **删掉所有 `policy-select-name`**，回到上游的位置默认机制（`select=0` = 成员列表里的第 1 个）。按名字指定默认项的问题是名字写错了也看不出来，位置默认至少行为一致。
 
+### 2b. 规则集走 jsDelivr 而不是 raw.githubusercontent.com
+
+小火箭在设备上要拉全部 37 个规则集。全指向 `raw.githubusercontent.com` 时，本机实测（网络通畅）总耗时 **93.8 秒**，其中两个 DOMAIN-SET 直接 **30 秒超时**：
+
+```
+37 个文件合计 0.71 MB，总耗时 93.8s
+30.01s  URLError  Shadowrocket/Apple/Apple_Domain.list
+30.00s  URLError  Shadowrocket/China/China_Domain.list
+ 3.35s  537KB     Shadowrocket/Global/Global_Domain.list
+```
+
+体积只有 0.71 MB，所以**不是大小问题，是 37 次独立请求打在 raw 上的可靠性问题**——raw 对短时间大量请求会限流，国内环境更差。改走 jsDelivr 后同样的 37 个文件：
+
+```
+jsDelivr 拉全部 37 个：合计 0.79MB，总耗时 26.6s，失败 0 个
+```
+
+在设备上更新配置时这个问题更明显：**这份配置新引入了 7 个设备上没有缓存的规则集**（4 个小火箭版 + 3 个 `_Domain.list`），必须现拉，正好打在 raw 最不稳的地方——表现就是「更新订阅超时」。
+
+改写成通用规则而不是逐个列白名单：
+
+```
+https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
+→ https://cdn.jsdelivr.net/gh/<owner>/<repo>@<ref>/<path>
+```
+
+所以上游以后引用新的 raw 仓库也能自动接住；万一某个仓库 jsDelivr 不服务，构建时的远程校验会失败并点名是哪个。想换回 raw 就把 `USE_JSDELIVR_FOR_RULESETS` 设成 `False`。
+
+注意 jsDelivr 对分支引用有缓存（最长十几小时），所以规则集内容可能比上游晚半天。规则集本身每日更新，这个延迟可以接受；要立刻生效可以手动 purge。
+
 ### 3. 自建组（只用于 `Shadowrocket-fallback.conf`）
 
 新增两个组，并把上游指向内置 `PROXY` 的地方改指向它们：
@@ -144,7 +174,7 @@ python3 scripts/build.py --out-dir /tmp/x   # 换输出目录
 - **没有实测**小火箭是否真的逐条 honor 远程规则集文件内部的 `no-resolve`。上游 README 和配置注释都指向「是」，但没法在没有设备的情况下跑实验。自测办法见下。
 - **`DOMAIN-SET` 的匹配语义**（是否含子域）没有实测，只按上游官方建议的 `X.list` + `X_Domain.list` 配对写法使用。
 - `no-resolve` 对 China 分类没有副作用，因为配置里 `GEOIP,CN,DIRECT` 紧随其后，CN 的 IP 仍然会被兜住。
-- 规则集直接引用上游 raw（未镜像到本仓库），所以上游改目录结构或 raw 被墙时会在下一次构建失败。这是刻意的：配置保持轻量，规则永远跟随上游最新。
+- 规则集**不镜像到本仓库**，生成时把上游的 raw 地址改写成 jsDelivr 直取（见 2b）。所以规则内容永远跟随上游最新，仓库保持轻量；代价是规则集内容可能比上游晚半天（jsDelivr 分支缓存），且万一某个仓库 jsDelivr 不服务，构建会失败。上游改目录结构时同样会在构建失败——这是刻意的，不会静默产出错配置。
 - 仓库里不含任何节点地址、密码或订阅地址。`稳定` 组正则里的 `Grande`、`BZ-VMess` 是节点名片段（见上）。
 
 ## 自测办法

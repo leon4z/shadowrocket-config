@@ -118,6 +118,25 @@ def tune_group(line: str, spec, variant: dict) -> str:
     return join_params(name, params)
 
 
+def rewrite_url(url: str, spec) -> str:
+    """把规则集 URL 换到指定的分发通道（见 spec.USE_JSDELIVR_FOR_RULESETS）。
+
+    通用改写而不是逐个列白名单：raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
+    → cdn.jsdelivr.net/gh/<owner>/<repo>@<ref>/<path>
+    这样上游以后引用新的 raw 仓库也能自动接住。
+    """
+    if not getattr(spec, "USE_JSDELIVR_FOR_RULESETS", False):
+        return url
+    if not url.startswith(spec._RAW_BASE):
+        return url
+    rest = url[len(spec._RAW_BASE):]
+    parts = rest.split("/", 3)
+    if len(parts) < 4:
+        return url
+    owner, repo, ref, path = parts
+    return f"{spec._JSD_BASE}{owner}/{repo}@{ref}/{path}"
+
+
 def expand_rule(line: str, spec, variant: dict) -> list[str]:
     """[Rule] 行：方言替换 + 策略替换。返回若干行（方言替换会一行变多行）。"""
     params = [p.strip() for p in line.split(",")]
@@ -127,13 +146,14 @@ def expand_rule(line: str, spec, variant: dict) -> list[str]:
     if rtype == "RULE-SET" and len(params) >= 3 and params[1] in dialect:
         d = dialect[params[1]]
         policy = substitute_policy(params[2], None, spec, variant)
-        out = [f"RULE-SET,{d['sr']},{policy}"]
+        out = [f"RULE-SET,{rewrite_url(d['sr'], spec)},{policy}"]
         if d["sr_domain_set"]:
-            out.append(f"DOMAIN-SET,{d['sr_domain_set']},{policy}")
+            out.append(f"DOMAIN-SET,{rewrite_url(d['sr_domain_set'], spec)},{policy}")
         out.extend(f"DOMAIN-WILDCARD,{w},{policy}" for w in d["wildcards"])
         return out
 
     if rtype in {"RULE-SET", "DOMAIN-SET"} and len(params) >= 3:
+        params[1] = rewrite_url(params[1], spec)
         params[2] = substitute_policy(params[2], None, spec, variant)
     elif rtype == "FINAL" and len(params) >= 2 and params[1]:
         params[1] = substitute_policy(params[1], None, spec, variant)
@@ -350,11 +370,18 @@ def main() -> int:
         lines = transform(upstream, spec, variant)
         sections = parse_sections(lines)
 
-        # 生成后的自检：不该再有圈X 引用；custom 变体不该再有裸 PROXY 策略
-        text = "\n".join(lines)
-        leftover = [u for u in re.findall(r"https://\S+?\.list", text) if "/QuantumultX/" in u]
+        # 生成后的自检：不该再有圈X 引用、不该有残留的 raw 规则集地址；
+        # custom 变体不该再有裸 PROXY 策略。
+        # 只看生效行 —— 上游注释里把 raw 地址当例子写着，那些不算。
+        live_rules = effective(sections.get("rule", []))
+        leftover = [l for l in live_rules if "/QuantumultX/" in l]
         if leftover:
-            raise Failure(f"{variant['id']}: 仍有圈X 引用 {leftover}")
+            raise Failure(f"{variant['id']}: 仍有圈X 引用 {leftover[:2]}")
+        if getattr(spec, "USE_JSDELIVR_FOR_RULESETS", False):
+            raw = [l for l in live_rules if "raw.githubusercontent.com" in l]
+            if raw:
+                raise Failure(
+                    f"{variant['id']}: 还有规则集地址没换到 jsDelivr（改写规则没覆盖到）: {raw[:2]}")
         if variant["substitute_proxy"]:
             bad = [l for l in effective(sections["proxy group"])
                    if "PROXY" in [p.strip() for p in l.split(",")]]
