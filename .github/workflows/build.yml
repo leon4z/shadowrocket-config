@@ -57,14 +57,17 @@ jobs:
             git rm -rq --cached . 2>/dev/null || true
           fi
 
-          cp "$GITHUB_WORKSPACE/dist/Shadowrocket.conf" ./Shadowrocket.conf
+          # 先清掉上一版的产物，避免改过文件名后旧配置留在 release 分支上
+          rm -f ./*.conf
+          cp "$GITHUB_WORKSPACE"/dist/*.conf ./
           git add -A
 
           if git diff --cached --quiet; then
-            echo "配置无变化，跳过发布（源哈希未变）"
+            echo "配置无变化，跳过发布（上游与规格都没变）"
             exit 0
           fi
 
-          git commit -q -m "build: $(date -u +%Y-%m-%dT%H:%M:%SZ) 校验 ${GITHUB_SHA::7}"
+          git commit -q -m "build: $(date -u +%Y-%m-%dT%H:%M:%SZ) 上游 $(date -u +%Y-%m-%d) 校验 ${GITHUB_SHA::7}"
           git push -q origin release
           echo "已发布到 release 分支"
+          ls -1 ./*.conf

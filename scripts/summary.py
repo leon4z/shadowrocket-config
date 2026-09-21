@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""把 build.py 的校验报告渲染成 Markdown，供 GitHub Actions 的 Step Summary 使用。
+"""把 build.py 的构建报告渲染成 Markdown，供 GitHub Actions 的 Step Summary 使用。
 
 用法：python3 scripts/summary.py dist/report.json >> "$GITHUB_STEP_SUMMARY"
-报告不存在时输出一行说明而不是报错——校验可能在抓取前就失败了，
+报告不存在时输出一行说明而不是报错 —— 构建可能在抓取前就失败了，
 那种情况下运行摘要里应该留下痕迹，而不是让这一步再失败一次。
 """
 
@@ -18,24 +18,29 @@ def main(argv: list[str]) -> int:
         with open(path, encoding="utf-8") as fh:
             r = json.load(fh)
     except (OSError, json.JSONDecodeError) as exc:
-        print("## 规则集校验结果\n")
+        print("## 构建结果\n")
         print(f"没有可用的报告（{type(exc).__name__}: {exc}）。")
-        print("校验在抓取远程规则集之前就失败了，请看上面的步骤日志。")
+        print("构建在抓取上游或规则集之前就失败了，请看上面的步骤日志。")
         return 0
 
     rule_sets = [x for x in r["refs"] if x["type"] == "RULE-SET"]
     domain_sets = [x for x in r["refs"] if x["type"] == "DOMAIN-SET"]
-    n_rules = sum(x["rules"] for x in rule_sets)
-    n_ip = sum(x["ip"] for x in rule_sets)
-    n_bad = sum(x["ip_no_resolve"] for x in rule_sets)
-    n_domains = sum(x["domains"] for x in domain_sets)
 
-    print("## 规则集校验结果\n")
-    print(f"- RULE-SET {len(rule_sets)} 个，规则 {n_rules} 条，"
-          f"其中 IP 类 {n_ip} 条，缺 `no-resolve` {n_bad} 条")
-    print(f"- DOMAIN-SET {len(domain_sets)} 个，域名 {n_domains} 条")
-    print(f"- 分组 {len(r['groups'])} 个")
-    print(f"- 源文件哈希 `{r['source_sha256']}`")
+    print("## 构建结果\n")
+    print(f"上游版本标记 `{r['upstream_rev']}` · 内容哈希 `{r['upstream_sha256']}`")
+    print(f"（{r['upstream_url']}）\n")
+
+    print("### 产物\n")
+    print("| 文件 | 组 | 远程集合 | 行数 |")
+    print("| --- | --- | --- | --- |")
+    for v in r["variants"]:
+        print(f"| `{v['file']}` | {v['groups']} | {v['refs']} | {v['lines']} |")
+
+    print("\n### 规则集校验\n")
+    print(f"- RULE-SET {len(rule_sets)} 个，规则 {sum(x['rules'] for x in rule_sets)} 条，"
+          f"其中 IP 类 {sum(x['ip'] for x in rule_sets)} 条，"
+          f"缺 `no-resolve` {sum(x['ip_no_resolve'] for x in rule_sets)} 条")
+    print(f"- DOMAIN-SET {len(domain_sets)} 个，域名 {sum(x['domains'] for x in domain_sets)} 条")
 
     if r.get("warnings"):
         print("\n### 警告\n")
@@ -44,7 +49,7 @@ def main(argv: list[str]) -> int:
     else:
         print("\n无警告：所有 IP 规则都带 `no-resolve`。")
 
-    print("\n### 各规则集条目数\n")
+    print("\n<details><summary>各规则集条目数</summary>\n")
     print("| 引用 | 条目 |")
     print("| --- | --- |")
     for x in r["refs"]:
@@ -54,6 +59,7 @@ def main(argv: list[str]) -> int:
         else:
             extra = f"，{x['ip']} IP" if x["ip"] else ""
             print(f"| `{name}` | {x['rules']} 规则{extra} |")
+    print("\n</details>")
     return 0
 
 

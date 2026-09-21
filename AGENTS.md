@@ -1,34 +1,48 @@
 # AGENTS.md — shadowrocket-config
 
-小火箭（Shadowrocket）配置仓库 `leon4z/shadowrocket-config` 的本地工作副本。背景、设计取舍、与基线配置的逐条差异、自测办法都在 `README.md`，这里只写协作约束。
+小火箭（Shadowrocket）配置仓库 `leon4z/shadowrocket-config` 的本地工作副本。背景、覆盖规格逐项说明、与上游的差异、未验证项、自测办法都在 `README.md`，这里只写协作约束。
 
 ## 硬约束
 
-1. **不要把任何节点信息写进这个仓库。** 仓库是公开的，且 `[Proxy]` 段必须保持为空——节点由小火箭 App 内的订阅管理。不要写入服务器地址、端口、密码、UUID、私钥、订阅 URL，也不要把节点名当分组员写死（分组用 `policy-regex-filter`）。
-2. **只改 `src/Shadowrocket.conf`。** `dist/` 是构建产物（已 gitignore），不要手工编辑，也不要手工 commit 到 `release` 分支——那是 CI 的位置。
-3. **提交前跑一遍** `python3 scripts/build.py`。它会联网校验全部远程规则集，并检查 `[Rule]` 引用的策略名是否在 `[Proxy Group]` 里定义过。本地跑通再 commit，避免 CI 失败。
-4. **不要为了「顺手修好」而扩大改动范围。** 这份配置是在用的东西，路由变化要有据可查。改了什么、为什么、影响哪些域名，写进 commit message 和 README。
+1. **不要往仓库里写节点信息。** 仓库是公开的，`[Proxy]` 段必须保持为空——节点由小火箭 App 内的订阅管理。不要写入服务器地址、端口、密码、UUID、私钥、订阅 URL，也不要把节点名当分组员写死（分组用 `policy-regex-filter`）。
+2. **只改 `src/overrides.py`。** `dist/` 是构建产物（已 gitignore），`release` 分支由 CI 发布，两者都不要手工改或手工推。
+3. **不要在 `src/overrides.py` 里存完整配置行。** 覆盖规格必须用「模式匹配」表达（比如「所有指向 PROXY 的地方换成速度」），不能用行号或整行替换——上游随时会增删行，整行替换会静默失配。上游新增服务分组时应该自动被接住，不需要改规格。
+4. **提交前跑一遍** `python3 scripts/build.py`。它会联网校验全部远程规则集、检查锚点、检查策略名解析。本地跑通再 commit。
+5. **不要为了「顺手修好」而扩大改动范围。** 这份配置是在用的东西，路由变化要有据可查。改了什么、为什么、影响哪些域名，写进 commit message 和 README。
 
 ## 分支
 
-- `main`：源文件 + 脚本 + 工作流。日常只推这里。
-- `release`：只放一个 `Shadowrocket.conf`，由 Actions 发布，供订阅 URL 使用。不要直接推。
+- `main`：规格 + 脚本 + 工作流。日常只推这里。
+- `release`：只放构建出的两份配置，由 Actions 发布，供订阅 URL 使用。不要直接推。
+
+## 改动会怎么传导
+
+```
+src/overrides.py  ──┐
+                    ├─→ build.py ─→ dist/*.conf ─→ release 分支 ─→ 订阅 URL
+上游 lazy_group.conf ┘
+```
+
+上游变了、规格没变，产物也会变（这是设计目的）。所以「release 分支有新提交」不一定意味着有人改了规格——看提交信息和 Actions Summary 里的上游版本标记。
 
 ## 权威状态从哪里取
 
-改配置前若要与 App 内实际状态对齐，注意 **`Backup/*.conf` 是过期导出**，权威来源是 iCloud Documents 目录下的解析缓存：
+要和小火箭 App 内的实际状态对齐时，注意 **`Documents/Backup/*.conf` 是过期导出**，权威来源是 iCloud Documents 目录下的解析缓存：
 
 ```
 ~/Library/Mobile Documents/iCloud~com~liguangming~Shadowrocket/Documents/
   <配置名>.conf--<hash>.db      ← sqlite，config 表 (section,name,value,option) 是生效配置
-  shadowrocket.sync.plist       ← configs 段列出哪些配置是 alive
+  shadowrocket.sync.plist       ← configs 段列出哪些配置是 alive（status: alive/deleted）
+  Modules/                      ← 模块，规则优先级高于配置文件
 ```
 
-节点名的权威来源是 Group Container（需要完全磁盘访问权限）：
+节点名的权威来源是 Group Container（需要完全磁盘访问权限，ZCode 沙箱会报 `Operation not permitted`）：
 
 ```
 ~/Library/Group Containers/group.com.liguangming.Shadowrocket/ServerManager   ← NSKeyedArchiver，$objects 里是节点条目
 ```
+
+注意：App 自己写节点名时会把 ASCII 部分**转成大写**（`🇸🇬Singapore 01` → `🇸🇬SINGAPORE 01`），`Backup/default-cn-copy.conf` 就是 App 自己生成的，可以对照。所以配置里出现全大写节点名不是笔误。
 
 ## 已知未验证项
 

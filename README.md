@@ -1,82 +1,49 @@
 # shadowrocket-config
 
-个人小火箭（Shadowrocket）配置仓库：源文件在这里维护，GitHub Actions 每天校验一次所有远程规则集，把通过的版本发布到 `release` 分支，小火箭通过一个 URL 订阅。
+个人小火箭（Shadowrocket）配置：**不存配置拷贝，存的是「上游 + 差异」**。每天从上游拉一次 `lazy_group.conf`，套用本仓库的覆盖规格，产出两份配置发布到 `release` 分支，小火箭通过链接订阅。
 
-节点不在这个仓库里，也不在配置文件里。配置的 `[Proxy]` 段是空的，节点由小火箭 App 内的订阅管理——这个仓库只负责「分流规则 + 策略组」。
+节点不在这个仓库里，也不在配置里（`[Proxy]` 段是空的）——节点由小火箭 App 内的订阅管理。这里只管分流规则和策略组。
 
-## 订阅地址
+## 两份配置
 
-```
-https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket.conf
-```
+| 文件 | 是什么 | 什么时候用 |
+| --- | --- | --- |
+| `lazy-sr.conf` | 上游原版逻辑，只把规则集换成小火箭方言 | 想完全跟着上游走、出口由首页手动选的场景 |
+| `lazy-sr-custom.conf` | 在上游基础上加了自建的 `速度` / `稳定` 两个组 | 想让 AI/谷歌走美国故障转移组、其余走最快东南亚组 |
 
-国内直连 `raw.githubusercontent.com` 通常不通，改用 jsDelivr 镜像（内容相同）：
-
-```
-https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket.conf
-```
-
-小火箭里：底部「配置」→ 右上「+」→ 粘贴上面的 URL → 下载后长按该配置 → 选中使用。
-
-> ⚠️ 一旦改用远程订阅，**在小火箭 App 里对这份配置的修改会在下次更新时被覆盖**。要改规则请改本仓库的 `src/Shadowrocket.conf`，commit 后 Actions 会自动重新校验并发布。如果只是想临时试试，建议先另存一份本地副本。
-
-## 日常怎么改
-
-只改 `src/Shadowrocket.conf`，然后 commit 到 `main`。工作流会：
-
-1. 把配置里所有 `RULE-SET` / `DOMAIN-SET` 的远程文件拉下来逐条校验（类型名是否认识、是否为空、IP 规则有没有 `no-resolve`）；
-2. 检查 `[Rule]` 段引用的策略名是否真的在 `[Proxy Group]` 里定义过，以及每个分组的 `policy-regex-filter` 是否是合法正则；
-3. 全部通过才发布到 `release`。
-
-**校验失败就不发布**，`release` 分支停在上一版，所以上游改名 / 断供 / 改格式不会直接打到你在用的配置上。失败原因在 Actions 运行页的 Summary 里，同时会列出每个规则集的条目数。
-
-本地也可以先跑一遍：
-
-```bash
-python3 scripts/build.py                      # 校验 + 生成 dist/Shadowrocket.conf
-python3 scripts/build.py --no-network         # 只做本地解析检查，不联网
-python3 scripts/build.py --out -              # 结果打到 stdout
-```
-
-## 与基线配置的差异
-
-基线 = 2026-09-21 00:52 App 内「稳定速度-本地定制」的实时状态（`Backup/` 里那份 9-20 22:03 的导出是过期的，`速度` 组少两个节点）。相对基线只有三类改动：
-
-### 1. `速度` / `稳定` 两个组改为正则筛选
-
-原来写死了节点名：
+两者除了下面列的差异，其余完全相同（同一份上游、同一套规则集、同样的 tolerance）。
 
 ```
-速度 = url-test,新加坡-SG-2-:1,新加坡-SG-1-:1,🇸🇬SG 01,🇸🇬SG 04 电信2X,…
-稳定 = fallback,美国 GRANDE&RCN 66.167.174.200 · 主线,…,BZ-VMESS-TLS,…
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/lazy-sr.conf
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/lazy-sr-custom.conf
 ```
 
-现在按名称正则筛：
+国内直连 `raw.githubusercontent.com` 通常不通，用 jsDelivr 镜像（内容相同）：
 
 ```
-速度 = url-test,policy-regex-filter=🇸🇬|SG|Singapore|新加坡|狮城|沪新|京新|深新|杭新|广新|🇲🇾|Malaysia|马来|马来西亚,…
-稳定 = fallback,policy-regex-filter=Grande|GRANDE|BZ-VMess|BZ-VMESS,…
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr.conf
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/lazy-sr-custom.conf
 ```
 
-原因有两条。一是订阅换代后写死的名字会失效。二是**写死的名字里大小写和实际节点对不上**：配置里是 `🇸🇬SG 04 电信2X`、`🇲🇾MALAYSIA 02`、`BZ-VMESS-TLS`，App 里实际节点名是 `🇸🇬SG 04 电信2x`、`🇲🇾Malaysia 02`、`BZ-VMess-TLS`。小火箭对分组员名的大小写是否敏感没有实测确认（`[Rule]` 里写 `YOUTUBE`、分组名却是 `YouTube` 是能正常工作的，说明策略名查找不区分大小写，但组员匹配不一定走同一段代码）。改成正则后这个不确定性就不存在了。
+小火箭里：底部「配置」→ 右上「+」→ 粘贴 URL → 下载后长按该配置 → 选中使用。
 
-两条正则都拿本机 115 个真实节点名验证过：`速度` 命中 14 个（原有 10 个 + 另一个订阅里的 4 个 `🇸🇬Singapore 0N`），`稳定` 精确命中原来的 3 个。
+> ⚠️ 远程配置一旦更新，会**覆盖在 App 内对该配置所做的修改**（手册「更新配置」一节明确写了）。所以这两份配置不要在 App 里改，要改就改本仓库的 `src/overrides.py`。如果你的用法是「在 App 里手动微调」，那应该改用本地配置（见下面「和本地配置的关系」）。
 
-副作用：`速度` 组现在包含订阅里**所有**东南亚节点，包括没测过速的。要恢复「筛出来但默认选中某个」，在行尾加 `policy-select-name=节点名` 即可（基线里本来就有 `policy-select-name=🇲🇾MALAYSIA 02`，按你选的方案没保留）。
+## 为什么不直接存一份配置
 
-⚠️ **`稳定` 组这条正则仍然依赖供应商标签**（`Grande`、`BZ-VMess`），供应商改名后这个组会变空，那 AI 和谷歌服务就没有可用出口了。想彻底免疫就换成按地区筛，代价是会包含订阅里所有美国节点：
+上游 `lazy_group.conf` 会持续演进：新增服务分类、调整规则顺序、改注释。存一份拷贝的话这些改进永远进不来，只有规则集内容会跟着上游变——这是「分叉一份配置自己维护」的通病。
 
-```
-稳定 = fallback,policy-regex-filter=🇺🇸|US|USA|United States|美国,timeout=5,interval=600,url=http://www.gstatic.com/generate_204
-```
+所以这里存的是**规格**：每天重新拉上游、重新套用差异。上游改了什么都会自动跟进来；如果上游把规格依赖的锚点改掉了（比如重命名了某个分组），构建会**显式失败**并列出缺哪个锚点，而不是静默产出一份错的配置。
 
-另外，正则会出现在公开仓库里，所以 `Grande`、`BZ-VMess` 这两个标签是公开的（只是名字，不含地址和密钥）。介意的话换成地区筛即可。
+## 覆盖规格改了什么
 
-### 2. 4 处 QuantumultX 版规则集引用改为 Shadowrocket 版
+全部改动都在 `src/overrides.py`，逐项都有注释。三类：
 
-上游 `johnshall/Shadowrocket-ADBlock-Rules-Forever` 的 `lazy_group.conf` 里，Apple / WeChat / Global / China 四个分类引用的是 `rule/QuantumultX/` 下的文件，这些文件的 IP 规则**不带 `no-resolve`**。小火箭遇到不带 `no-resolve` 的 IP 规则，会为了判断域名是否命中而发起本地 DNS 查询。
+### 1. 规则集方言：4 处圈X 引用 → 小火箭版
 
-逐条比对过两版的差异（口径：QX 的 `HOST-*` ↔ SR 的 `DOMAIN-*`）：
+上游这四个分类引用的是 `rule/QuantumultX/` 下的文件，里面的 IP 规则**不带 `no-resolve`**。小火箭遇到不带 `no-resolve` 的 IP 规则，会为了判断域名是否命中而发起本地 DNS 查询。
+
+逐条比对过两版的差异（口径：圈X 的 `HOST-*` ↔ 小火箭的 `DOMAIN-*`）：
 
 | 分类 | 域名规则 | IP 规则 | IP 集合是否逐条相同 | 缺 no-resolve |
 | --- | --- | --- | --- | --- |
@@ -85,32 +52,89 @@ python3 scripts/build.py --out -              # 结果打到 stdout
 | Apple | 1862 → 1605 | 13 → 13 | 是 | 13 → **0** |
 | Global | 35666 → 34976 | 116 → 116 | 是 | 116 → **0** |
 
-两版的 IP 规则集合逐条相同，**唯一差别就是 SR 版每条都带 `no-resolve`**。换成 SR 版后全配置 1436 条 IP 规则 100% 带 `no-resolve`。
+两版的 IP 规则集合逐条相同，**唯一差别就是小火箭版每条都带 `no-resolve`**。换过来之后全配置 1436 条 IP 规则 100% 带 `no-resolve`。
 
-Apple 少掉的 257 条域名全部是 SR 版里已有父级后缀覆盖的子域（无兜底 0 条）。Global 少掉的 700 条里有 25 条没有同类兜底，其中 24 条是 `google.com.XX` 国家域——它们会落到 `FINAL,速度`，策略和原来一致（原来就是 Global→速度）。
+Apple 少掉的 257 条域名全部是小火箭版里已有父级后缀覆盖的子域（无兜底 0 条）。Global 少掉的 700 条里有 25 条没有同类兜底，其中 24 条是 `google.com.XX` 国家域——它们会落到 `FINAL`，策略和原来一致。
 
-**唯一真实的路由变化**：上游 SR 版 Global 里新增了 10 条国内域名，会从「China→直连」变成「Global→速度（代理）」：
+**唯一真实的路由变化**：上游小火箭版 Global 里新增了 10 条国内域名，会从「China→直连」变成「Global→代理」：
 
 ```
 futu.cn  futubull.cn  jinrieluosi.cn  longbridge.cn  longportapp.cn
 schwab.com.cn  skytigris.cn  steamconnecttest.com  tigerbbs.cn  zhijianfengyi.cn
 ```
 
-这是上游有意加的（富途、长桥、嘉信这类跨境券商域名），不是方言转换的副作用。不想要的话在 `[Rule]` 里 Global 那两行之前加 `DOMAIN-SUFFIX,<域名>,DIRECT` 即可。
+这是上游有意加的（富途、长桥、嘉信这类跨境券商域名），不是方言转换的副作用。不想要就在 `src/overrides.py` 的 `RULESET_DIALECT` 之外加一条直连覆盖。
 
-### 3. 补 DOMAIN-SET 与 16 条 DOMAIN-WILDCARD
+另外小火箭版把域名拆到了 `X_Domain.list`（裸域名，带前导点），必须用 `DOMAIN-SET` 引用——只换 `RULE-SET` 那一行会丢掉全部域名规则（Apple 丢 1560 条、China 丢 3689 条、Global 丢 34895 条）。圈X 版里的 15 + 1 条 `HOST-WILDCARD` 在小火箭版没有对应写法，用小火箭原生的 `DOMAIN-WILDCARD` 显式补回来。
 
-Shadowrocket 版把域名拆成了两个文件：`X.list` 只放 IP / USER-AGENT / 关键词规则，几万条域名在 `X_Domain.list` 里，必须用 `DOMAIN-SET` 引用。只换 `RULE-SET` 那一行不补 `DOMAIN-SET` 会丢掉全部域名规则（Apple 丢 1560 条、China 丢 3689 条、Global 丢 34895 条），所以三处都补了。
+### 2. 分组调参
 
-QX 版的 Apple 和 China 里另有 15 + 1 条 `HOST-WILDCARD` 规则（`apple.*`、`iphone.*`、`macbookpro.*`、`windows-*.net` 等），SR 版没有对应写法，因此在配置里显式写成 `DOMAIN-WILDCARD`（这是小火箭原生类型，在配置文件规则行的白名单正则里）。
+- **所有组的 `tolerance` 统一改成 100**（上游是 0 / 50 / 100 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。只有会测速的组有这项，`select` 类型的分组不测速、不涉及。
+- **删掉所有 `policy-select-name`**，回到上游的位置默认机制（`select=0` = 成员列表里的第 1 个）。按名字指定默认项的问题是名字写错了也看不出来，位置默认至少行为一致。
+
+### 3. 自建组（只用于 `lazy-sr-custom.conf`）
+
+新增两个组，并把上游指向内置 `PROXY` 的地方改指向它们：
+
+```
+速度 = url-test,policy-regex-filter=🇸🇬|SG|Singapore|新加坡|狮城|沪新|京新|深新|杭新|广新|🇲🇾|Malaysia|马来|马来西亚,interval=600,tolerance=100,timeout=3,url=http://www.gstatic.com/generate_204
+稳定 = fallback,policy-regex-filter=Grande|GRANDE|BZ-VMess|BZ-VMESS,timeout=5,interval=600,tolerance=100,url=http://www.gstatic.com/generate_204
+```
+
+替换规则：**默认把所有 `PROXY` 换成 `速度`，`AI` 和 `谷歌服务` 两处换成 `稳定`**。用模式匹配而不是行号，所以上游以后新增的服务分组只要指向 `PROXY`，会自动一起改。
+
+两条正则都拿本机 115 个真实节点名验证过命中集合：`速度` 命中 14 个（含另一个订阅的 4 个 `🇸🇬Singapore 0N`），`稳定` 精确命中原来的 3 个。
+
+- `速度` 是 `url-test`：组内自动选最快节点。
+- `稳定` 是 `fallback`：按顺序用，当前的不通就换下一个。
+- 上游的 `select` 服务组保持不变——所以「出口类别」是你定的（AI 走稳定、YouTube 走速度），「类别内部」自动。
+
+⚠️ **`稳定` 组这条正则绑在供应商标签上**（`Grande`、`BZ-VMess`），供应商改名后这个组会变空，AI 和谷歌服务就没有可用出口了。想彻底免疫就换成按地区筛，代价是包含订阅里所有美国节点：
+
+```
+稳定 = fallback,policy-regex-filter=🇺🇸|US|USA|United States|美国,...
+```
+
+另外这两个标签会出现在公开仓库里（只是名字，不含地址和密钥）。介意的话换成地区筛。
+
+## 和本地配置的关系
+
+如果你更想在 App 里手动微调配置，那**不要用这里的订阅**——远程配置的更新会覆盖本地修改。手册 `自动更新` 一节给了两种「既要自动更新又不丢自定义」的官方做法：
+
+- **删掉/注释掉 `update-url = *`**：配置变成「本地配置」，自动更新只刷新规则集，不动配置本身。
+- **用扩展配置/包含配置**（`include = `，配置文件 ⓘ > 通用 > 包含配置）：b 包含 a，b 优先级更高，自定义放 b。
+
+本仓库走的是第三条路（上游 + 差异，每日重建），好处是不依赖 `include` 的合并语义（手册没写 `[Proxy Group]` 是按名覆盖还是追加），也不需要在设备上多挂一份配置。
+
+## 日常怎么改
+
+只改 `src/overrides.py`，然后 commit 到 `main`。工作流会：
+
+1. 拉上游 `lazy_group.conf`，检查锚点；
+2. 生成两个变体，自检「不该再有圈X 引用」「custom 变体不该再有裸 `PROXY` 策略」；
+3. 把配置里所有远程规则集拉下来逐条校验（类型名是否认识、是否为空、IP 规则有没有 `no-resolve`）；
+4. 检查 `[Rule]` 引用的策略名是否真的在 `[Proxy Group]` 里定义过，以及每个 `policy-regex-filter` 是不是合法正则；
+5. 全部通过才发布到 `release`。
+
+**任一步失败就不发布**，`release` 停在上一版。失败原因在 Actions 运行页的 Summary 里，同时列出每个规则集的条目数。
+
+本地也可以先跑：
+
+```bash
+python3 scripts/build.py                    # 拉上游 + 校验 + 生成两份配置
+python3 scripts/build.py --no-network       # 用上次抓到的上游缓存，不联网
+python3 scripts/build.py --out-dir /tmp/x   # 换输出目录
+```
+
+输出是 (上游内容, 规格) 的**纯函数**——同样输入逐字节产出同样结果，上游和规格都没变就不产生新提交。
 
 ## 已知取舍与未验证项
 
-- **`no-resolve` 对 China 分类没有副作用**，因为配置里 `GEOIP,CN,DIRECT` 紧随其后，CN 的 IP 仍然会被兜住。
-- **没有实测**小火箭是否真的逐条 honor 远程规则集文件内部的 `no-resolve`。上游 README 和配置文件注释都指向「是」，但没法在没有设备的情况下跑实验。自测办法见下。
+- **没有实测**小火箭是否真的逐条 honor 远程规则集文件内部的 `no-resolve`。上游 README 和配置注释都指向「是」，但没法在没有设备的情况下跑实验。自测办法见下。
 - **`DOMAIN-SET` 的匹配语义**（是否含子域）没有实测，只按上游官方建议的 `X.list` + `X_Domain.list` 配对写法使用。
-- 规则集直接引用上游 raw（未镜像到本仓库），所以上游改目录结构、改格式或 raw 被墙时，会在下一次构建失败。这是刻意的取舍：配置保持轻量，规则永远跟随上游最新。
-- 仓库里不含任何节点地址、密码或订阅地址。
+- `no-resolve` 对 China 分类没有副作用，因为配置里 `GEOIP,CN,DIRECT` 紧随其后，CN 的 IP 仍然会被兜住。
+- 规则集直接引用上游 raw（未镜像到本仓库），所以上游改目录结构或 raw 被墙时会在下一次构建失败。这是刻意的：配置保持轻量，规则永远跟随上游最新。
+- 仓库里不含任何节点地址、密码或订阅地址。`稳定` 组正则里的 `Grande`、`BZ-VMess` 是节点名片段（见上）。
 
 ## 自测办法
 
@@ -118,25 +142,28 @@ QX 版的 Apple 和 China 里另有 15 + 1 条 `HOST-WILDCARD` 规则（`apple.*
 
 | 输入 | 期望 |
 | --- | --- |
-| `iphone.com` | 命中 `DOMAIN-WILDCARD,iphone.*` → 苹果服务（验证通配规则生效） |
+| `iphone.com` | 苹果服务（验证 `DOMAIN-WILDCARD` 通配规则生效） |
 | `www.apple.com` | 苹果服务（验证 `DOMAIN-SET` 的 `Apple_Domain.list` 生效） |
 | `www.baidu.com` | DIRECT（验证 `China_Domain.list` 生效） |
 | `www.google.com` | 谷歌服务（验证 Global 之前的规则仍然优先） |
-| `futu.cn` | 速度（这是上面说的那 10 条变化之一） |
+| `futu.cn` | 速度（`lazy-sr-custom.conf`；这是上面说的那 10 条变化之一） |
+
+再确认一下 `lazy-sr-custom.conf` 里两个组真的筛到了节点：配置详情 →「代理分组」，看 `速度` 有几个成员、`稳定` 是不是 3 个。
 
 ## 目录结构
 
 ```
-src/Shadowrocket.conf          配置源文件，唯一需要手工维护的东西
-scripts/build.py               校验 + 生成
+src/overrides.py               覆盖规格，唯一需要手工维护的东西
+scripts/build.py               拉上游 + 套规格 + 校验 + 生成
+scripts/summary.py             把构建报告渲染成 Actions 运行摘要
 dist/                          本地构建产物（不提交）
 .github/workflows/build.yml    每日 UTC 23:00 / push 时构建，发布到 release
 ```
 
-`release` 分支只放一个 `Shadowrocket.conf`，是给订阅 URL 用的。
+`release` 分支只放两份配置，供订阅 URL 使用。
 
 ## 上游依赖
 
-- 规则集：[blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script)（`rule/Shadowrocket/*`）
+- 配置骨架：[johnshall/Shadowrocket-ADBlock-Rules-Forever](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever) 的 `lazy_group.conf`（`release` 分支）
+- 规则集：[blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script) 的 `rule/Shadowrocket/*`
 - AI 规则集：[iab0x00/ProxyRules](https://github.com/iab0x00/ProxyRules)
-- 配置骨架与分组思路：[johnshall/Shadowrocket-ADBlock-Rules-Forever](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever) 的 `lazy_group.conf`
