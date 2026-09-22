@@ -751,7 +751,7 @@ def main() -> int:
             if daily:
                 header.append(f"# 本次上游发布 {selection['upstream_commit']} · 任务 {selection['upstream_run_id']}")
             if selection["version"] == 2:
-                header.append(f"# 筛选策略 v2 · 速度主国家：{selection['speed_country'] or '跨国精选'} · 同订阅同名历史延续，当前参数另行验证。")
+                header.append(f"# 筛选策略 v2 · 速度主国家：{selection['speed_country'] or '跨国精选'} · 按节点身份延续历史，当前参数另行验证。")
         elif variant["strict_stable"]:
             header.append("# 通用版：不使用个人采样。稳定组默认空，使用自动/混合版前须指定稳定节点。")
         else:
