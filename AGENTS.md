@@ -5,7 +5,7 @@
 ## 硬约束
 
 1. **不要往仓库里写节点信息。** 仓库是公开的，`[Proxy]` 段必须保持为空——节点由小火箭 App 内的订阅管理。不要写入服务器地址、端口、密码、UUID、私钥、订阅 URL，也不要把节点名当分组员写死（分组用 `policy-regex-filter`）。
-2. **只改 `src/overrides.py`。** `dist/` 是构建产物（已 gitignore），`release` 分支由 CI 发布，两者都不要手工改或手工推。Karing 那套产物是 `render_karing.py` 从小火箭配置渲染出来的，**不要单独去改 Karing 的 JSON 或规则集**——要改就改规格，两个客户端一起变。
+2. **日常分流修改集中在 `src/overrides.py`，采样筛选输入为 `src/selection.json`。** 清单只能包含已校验的节点名正则和汇总元数据，禁止连接信息；生成器能力变化须同步测试。`dist/` 是构建产物（已 gitignore），`release` 分支由 CI 发布，两者都不要手工改或手工推。Karing 那套产物是 `render_karing.py` 从小火箭配置渲染出来的，**不要单独去改 Karing 的 JSON 或规则集**——要改就改规格，两个客户端一起变。
 3. **不要在 `src/overrides.py` 里存完整配置行。** 覆盖规格必须用「模式匹配」表达（比如「所有指向 PROXY 的地方换成速度」），不能用行号或整行替换——上游随时会增删行，整行替换会静默失配。上游新增服务分组时应该自动被接住，不需要改规格。
 4. **提交前跑一遍** `python3 scripts/build.py`。它会联网校验全部远程规则集、检查锚点、检查策略名解析。本地跑通再 commit。
 5. **不要为了「顺手修好」而扩大改动范围。** 这份配置是在用的东西，路由变化要有据可查。改了什么、为什么、影响哪些域名，写进 commit message 和 README。
@@ -14,12 +14,13 @@
 ## 分支
 
 - `main`：规格 + 脚本 + 工作流。日常只推这里。
-- `release`：只放构建出的两份配置，由 Actions 发布，供订阅 URL 使用。不要直接推。
+- `release`：只放构建出的三份配置和 Karing 产物，由 Actions 发布，供订阅 URL 使用。不要直接推。
 
 ## 改动会怎么传导
 
 ```
 src/overrides.py  ──┐
+src/selection.json ┤
                     ├─→ build.py ─→ dist/*.conf ─→ release 分支 ─→ 订阅 URL
 上游 lazy_group.conf ┘
 ```

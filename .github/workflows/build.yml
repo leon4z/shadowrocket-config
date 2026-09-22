@@ -10,6 +10,7 @@ on:
     paths:
       - 'src/**'
       - 'scripts/**'
+      - 'tests/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
@@ -29,6 +30,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: 运行生成器单测
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
       - name: 校验远程规则集并生成配置
         run: python3 scripts/build.py --report dist/report.json

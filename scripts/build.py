@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""拉上游 lazy_group.conf，套用 src/overrides.py 的规格，产出两份配置。
+"""拉上游 lazy_group.conf，套用覆盖规格与采样清单，产出三份配置。
 
 流程：
   1. 拉上游 johnshall/lazy_group.conf
@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
@@ -28,6 +29,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC_PATH = os.path.join(ROOT, "src", "overrides.py")
+SELECTION_PATH = os.path.join(ROOT, "src", "selection.json")
 
 # 小火箭规则行白名单。前 16 个来自主二进制里那条校验正则；
 # IP6-CIDR / PROTOCOL / AND / NOT / OR 是同一套解析器的其它 token。
@@ -63,6 +65,82 @@ def load_spec():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def validate_selection(document: dict, spec) -> dict:
+    """Reject broad filters, malformed metadata and accidental private fields."""
+    if not isinstance(document, dict) or set(document) != {
+        "version", "mode", "generated_at", "window_start", "window_end",
+        "completed_runs", "selection_id", "groups",
+    }:
+        raise Failure("采样清单顶层字段不符合固定契约")
+    if document["version"] != 1 or document["mode"] != "trial":
+        raise Failure("采样清单版本或模式不支持")
+    times = [document[k] for k in ("window_start", "window_end", "generated_at")]
+    if any(type(v) is not int or v <= 0 for v in times) or times != sorted(times):
+        raise Failure("采样清单时间窗口无效")
+    if type(document["completed_runs"]) is not int or document["completed_runs"] < 3:
+        raise Failure("采样清单完成轮数不足 3")
+    if not isinstance(document["selection_id"], str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", document["selection_id"]):
+        raise Failure("采样清单 selection_id 无效")
+    groups = document["groups"]
+    if not isinstance(groups, dict) or not spec.REQUIRED_SAMPLED_GROUPS <= set(groups):
+        raise Failure("采样清单缺少速度或既有国家组")
+    if len(groups) > 32:
+        raise Failure("采样清单分组数量超限")
+    for name, entry in groups.items():
+        if not isinstance(name, str) or (name != "速度" and not re.fullmatch(r"[\w\u4e00-\u9fff]{1,20}节点", name)):
+            raise Failure("采样清单分组名无效")
+        if name in {"稳定", "PROXY", "DIRECT"} or not isinstance(entry, dict) or set(entry) != {"pattern", "node_count"}:
+            raise Failure("采样清单分组字段无效")
+        pattern = entry["pattern"]
+        if type(entry["node_count"]) is not int or entry["node_count"] < 1 or entry["node_count"] > 1000:
+            raise Failure(f"{name} 的 node_count 无效")
+        if not isinstance(pattern, str) or len(pattern) > 20000 or not pattern.startswith("(?i)^(?:") or not pattern.endswith(")$"):
+            raise Failure(f"{name} 必须使用精确锚定正则")
+        if any(c in pattern for c in (",", "\n", "\r")):
+            raise Failure(f"{name} 正则含分隔符或换行")
+        inner = pattern[len("(?i)^(?:"):-2]
+        if not inner:
+            raise Failure(f"{name} 正则为空")
+        alias_len = 0
+        index = 0
+        while index < len(inner):
+            char = inner[index]
+            if char == "\\":
+                if inner[index:index + 4] in {"\\x2c", "\\x23"}:
+                    index += 4
+                elif index + 1 < len(inner) and not inner[index + 1].isalnum():
+                    index += 2
+                else:
+                    raise Failure(f"{name} 正则含非字面量转义")
+                alias_len += 1
+                continue
+            if char == "|":
+                if alias_len == 0:
+                    raise Failure(f"{name} 正则含空节点名")
+                alias_len = 0
+            elif char in ".^$*+?{}[]()":
+                raise Failure(f"{name} 正则含宽泛匹配符")
+            else:
+                alias_len += 1
+            index += 1
+        if alias_len == 0:
+            raise Failure(f"{name} 正则含空节点名")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise Failure(f"{name} 正则无法编译: {exc}") from exc
+    return document
+
+
+def load_selection(spec, path: str = SELECTION_PATH) -> dict:
+    try:
+        with open(path, encoding="utf-8") as file:
+            document = json.load(file)
+    except (OSError, ValueError) as exc:
+        raise Failure("缺少或无法解析 src/selection.json，不能退回全节点筛选") from exc
+    return validate_selection(document, spec)
 
 
 # --------------------------------------------------------------------------- #
@@ -101,9 +179,33 @@ def join_params(name: str, params: list[str]) -> str:
     return f"{name} = " + ",".join(params)
 
 
-def tune_group(line: str, spec, variant: dict) -> str:
-    """调参：删掉按名指定默认项的参数、tolerance 统一、必要时替换 PROXY。"""
+def sampled_group(name: str, pattern: str, spec) -> str:
+    kind = "fallback" if name == "速度" else "url-test"
+    parts = [kind, f"policy-regex-filter={pattern}", f"interval={spec.PROBE_INTERVAL}",
+             f"timeout={spec.PROBE_TIMEOUT}", f"url={spec.PROBE_URL}"]
+    if kind == "url-test":
+        parts.append(f"tolerance={spec.TOLERANCE}")
+    return join_params(name, parts)
+
+
+def extra_groups(spec, selection: dict) -> list[str]:
+    lines = [sampled_group("速度", selection["groups"]["速度"]["pattern"], spec),
+             join_params("稳定", ["fallback", f"policy-regex-filter={spec.STABLE_PATTERN}",
+                                      f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}",
+                                      f"url={spec.PROBE_URL}"])]
+    for name in sorted(set(selection["groups"]) - spec.REQUIRED_SAMPLED_GROUPS):
+        lines.append(sampled_group(name, selection["groups"][name]["pattern"], spec))
+    return lines
+
+
+def tune_group(line: str, spec, variant: dict, selection: dict) -> str:
+    """Apply measured exact filters and variant routing to upstream groups."""
     name, params = split_params(line)
+
+    if name in selection["groups"]:
+        return sampled_group(name, selection["groups"][name]["pattern"], spec)
+    if name in spec.STABLE_ONLY_SERVICES and variant["strict_stable"]:
+        return join_params(name, ["select", "稳定"])
 
     params = [p for p in params
               if not any(p.startswith(f"{d}=") for d in spec.DROP_GROUP_PARAMS)]
@@ -111,9 +213,7 @@ def tune_group(line: str, spec, variant: dict) -> str:
     params = [f"tolerance={spec.TOLERANCE}" if p.startswith("tolerance=") else p
               for p in params]
 
-    if variant["substitute_proxy"]:
-        target = spec.PROXY_TARGET_PER_GROUP.get(name, spec.PROXY_TARGET_DEFAULT)
-        params = [target if p == "PROXY" else p for p in params]
+    params = [variant["default_policy"] if p == "PROXY" else p for p in params]
 
     return join_params(name, params)
 
@@ -164,15 +264,16 @@ def expand_rule(line: str, spec, variant: dict) -> list[str]:
 
 
 def substitute_policy(policy: str, group_name, spec, variant: dict) -> str:
-    if not variant["substitute_proxy"] or policy != "PROXY":
-        return policy
-    if group_name:
-        return spec.PROXY_TARGET_PER_GROUP.get(group_name, spec.PROXY_TARGET_DEFAULT)
-    return spec.PROXY_TARGET_DEFAULT
+    return variant["default_policy"] if policy == "PROXY" else policy
 
 
-def transform(upstream: str, spec, variant: dict) -> list[str]:
-    overrides = dict(getattr(spec, "GENERAL_OVERRIDES", None) or {})
+def general_overrides(spec, variant: dict) -> dict[str, str]:
+    return {**(getattr(spec, "GENERAL_OVERRIDES", None) or {}),
+            "update-url": f"{spec.RELEASE_URL_BASE}{variant['id']}.conf"}
+
+
+def transform(upstream: str, spec, variant: dict, selection: dict) -> list[str]:
+    overrides = general_overrides(spec, variant)
     applied: set[str] = set()
 
     def pending_general() -> list[str]:
@@ -189,11 +290,10 @@ def transform(upstream: str, spec, variant: dict) -> list[str]:
                 applied.update(overrides)
             section = s[1:-1].strip().lower()
             out.append(raw)
-            if section == "proxy group" and variant["substitute_proxy"]:
+            if section == "proxy group":
                 out.append("")
-                out.append("# 本地定制：把上游指向内置 PROXY 的地方改为指向以下两个组。")
-                out.append("# 底层节点按名称正则从订阅里筛，订阅换代不需要改配置。")
-                out.extend(spec.EXTRA_GROUPS)
+                out.append("# 试跑采样快照中的精确节点名筛选；分组不包含连接信息。")
+                out.extend(extra_groups(spec, selection))
             continue
         if s and not s.startswith("#"):
             if section == "general" and overrides:
@@ -203,7 +303,7 @@ def transform(upstream: str, spec, variant: dict) -> list[str]:
                     applied.add(key)
                     continue
             if section == "proxy group":
-                out.append(tune_group(raw, spec, variant))
+                out.append(tune_group(raw, spec, variant, selection))
                 continue
             if section == "rule":
                 out.extend(expand_rule(raw, spec, variant))
@@ -238,6 +338,7 @@ def effective(lines: list[str]) -> list[str]:
 
 def validate_groups(sections: dict[str, list[str]]) -> set[str]:
     names: set[str] = set()
+    references: dict[str, list[str]] = {}
     for line in effective(sections.get("proxy group", [])):
         name, params = split_params(line)
         if not name:
@@ -252,6 +353,7 @@ def validate_groups(sections: dict[str, list[str]]) -> set[str]:
 
         filt = next((p for p in params if p.startswith("policy-regex-filter=")), None)
         inline = [p for p in params[1:] if "=" not in p]
+        references[name] = inline
         if filt:
             try:
                 re.compile(filt.split("=", 1)[1])
@@ -259,7 +361,80 @@ def validate_groups(sections: dict[str, list[str]]) -> set[str]:
                 raise Failure(f"分组 {name} 的 policy-regex-filter 不是合法正则: {exc}")
         elif not inline:
             raise Failure(f"分组 {name} 既没有成员也没有 policy-regex-filter")
+    known = {name.upper(): name for name in names}
+    for name, members in references.items():
+        for member in members:
+            if member.upper() not in known and member.upper() not in BUILTIN_POLICIES:
+                raise Failure(f"分组 {name} 引用未定义的成员 {member!r}")
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def walk(name: str) -> None:
+        if name in visiting:
+            raise Failure(f"分组引用形成循环: {name}")
+        if name in visited:
+            return
+        visiting.add(name)
+        for member in references[name]:
+            target = known.get(member.upper())
+            if target:
+                walk(target)
+        visiting.remove(name)
+        visited.add(name)
+
+    for name in references:
+        walk(name)
     return names
+
+
+def validate_variant(sections: dict[str, list[str]], spec, variant: dict, selection: dict) -> set[str]:
+    if effective(sections.get("proxy", [])):
+        raise Failure("[Proxy] 含实际节点，公开配置必须为空")
+    groups = validate_groups(sections)
+    definitions = dict(split_params(line) for line in effective(sections.get("proxy group", [])))
+    expected_groups = set(selection["groups"]) | {"稳定"}
+    if not expected_groups <= groups:
+        raise Failure(f"{variant['id']}: 精选组缺失")
+    for name, entry in selection["groups"].items():
+        line = definitions[name]
+        want_type = "fallback" if name == "速度" else "url-test"
+        if line[0] != want_type or f"policy-regex-filter={entry['pattern']}" not in line:
+            raise Failure(f"{variant['id']}: {name} 未应用采样正则")
+        expected = {f"url={spec.PROBE_URL}", f"timeout={spec.PROBE_TIMEOUT}",
+                    f"interval={spec.PROBE_INTERVAL}"}
+        if not expected <= set(line):
+            raise Failure(f"{variant['id']}: {name} 探测参数不一致")
+        if (name == "速度" and any(p.startswith("tolerance=") for p in line)) or (
+            name != "速度" and f"tolerance={spec.TOLERANCE}" not in line):
+            raise Failure(f"{variant['id']}: {name} tolerance 无效")
+    stable = definitions["稳定"]
+    if stable[0] != "fallback" or f"policy-regex-filter={spec.STABLE_PATTERN}" not in stable or any(
+        p.startswith("tolerance=") for p in stable):
+        raise Failure(f"{variant['id']}: 稳定组定义不符")
+    for anchor in spec.ANCHORS:
+        if " = select," not in anchor:
+            continue
+        name = anchor.split(" = ", 1)[0]
+        params = definitions.get(name)
+        if not params or params[0] != "select":
+            raise Failure(f"{variant['id']}: 服务组 {name} 缺失或类型变更")
+        inline = [p for p in params[1:] if "=" not in p]
+        if name in spec.STABLE_ONLY_SERVICES and variant["strict_stable"]:
+            if inline != ["稳定"]:
+                raise Failure(f"{variant['id']}: {name} 必须严格仅选稳定")
+        elif variant["default_policy"] not in inline:
+            raise Failure(f"{variant['id']}: {name} 默认代理出口错误")
+        if ",DIRECT," in anchor and "DIRECT" not in inline:
+            raise Failure(f"{variant['id']}: {name} 原有直连选项丢失")
+        if variant["default_policy"] == "速度" and "PROXY" in inline:
+            raise Failure(f"{variant['id']}: {name} 残留手动 PROXY")
+    finals = [line.split(",", 2)[1] for line in effective(sections.get("rule", [])) if line.startswith("FINAL,")]
+    if finals != [variant["default_policy"]]:
+        raise Failure(f"{variant['id']}: FINAL 出口与变体不符")
+    wanted_url = f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf"
+    if wanted_url not in effective(sections.get("general", [])):
+        raise Failure(f"{variant['id']}: update-url 没有指回同名产物")
+    return groups
 
 
 def validate_rules(sections: dict[str, list[str]], groups: set[str]) -> list[tuple[str, str]]:
@@ -342,6 +517,7 @@ def main() -> int:
     args = ap.parse_args()
 
     spec = load_spec()
+    selection = load_selection(spec)
     os.makedirs(args.out_dir, exist_ok=True)
     # 上游内容的缓存固定放 dist/cache/，与 --out-dir 无关：
     # 这样 --no-network 换输出目录也能用，而且不会被当成产物发布出去。
@@ -380,17 +556,19 @@ def main() -> int:
         "variants": [],
         "refs": [],
         "warnings": [],
+        "selection": {key: selection[key] for key in (
+            "mode", "selection_id", "generated_at", "window_start", "window_end", "completed_runs")},
     }
 
     built: dict[str, tuple[str, list[tuple[str, str]]]] = {}
 
     for variant in spec.VARIANTS:
-        lines = transform(upstream, spec, variant)
+        lines = transform(upstream, spec, variant, selection)
         sections = parse_sections(lines)
 
         # 生成后的自检：不该再有圈X 引用、不该有残留的 raw 规则集地址；
         # custom 变体不该再有裸 PROXY 策略；[General] 覆盖要真的生效。
-        for key, val in (getattr(spec, "GENERAL_OVERRIDES", None) or {}).items():
+        for key, val in general_overrides(spec, variant).items():
             want = f"{key} = {val}"
             if want not in effective(sections.get("general", [])):
                 raise Failure(f"{variant['id']}: [General] 覆盖没生效，期望 {want!r}")
@@ -404,19 +582,18 @@ def main() -> int:
             if raw:
                 raise Failure(
                     f"{variant['id']}: 还有规则集地址没换到 jsDelivr（改写规则没覆盖到）: {raw[:2]}")
-        if variant["substitute_proxy"]:
-            bad = [l for l in effective(sections["proxy group"])
-                   if "PROXY" in [p.strip() for p in l.split(",")]]
-            if bad:
-                raise Failure(f"{variant['id']}: 仍有指向 PROXY 的分组 {bad[:2]}")
-
-        groups = validate_groups(sections)
+        groups = validate_variant(sections, spec, variant, selection)
         refs = validate_rules(sections, groups)
 
         header = [
             f"# 由 leon4z/shadowrocket-config 生成 · {variant['title']}",
             f"# 上游 {spec.UPSTREAM_URL}",
             f"# 上游版本标记 {upstream_rev} · 上游内容 sha256:{upstream_hash}",
+            f"# 节点筛选：试跑快照 {selection['selection_id']} · 完成 {selection['completed_runs']} 轮",
+            "# 采样窗口 " + datetime.fromtimestamp(selection["window_start"], timezone.utc).isoformat()
+            + " 至 " + datetime.fromtimestamp(selection["window_end"], timezone.utc).isoformat(),
+            "# 快照生成 " + datetime.fromtimestamp(selection["generated_at"], timezone.utc).isoformat()
+            + " · 这不是 24 小时或长期稳定性结论；清单未自动更新。",
             "# 上游 + 覆盖规格，差异见仓库 README。不要直接改这个文件。",
         ]
         out_text = "\n".join(header) + "\n" + "\n".join(lines)
@@ -436,7 +613,7 @@ def main() -> int:
         print(f"  {variant['id']}.conf  {len(groups)} 组 / {len(refs)} 个远程集合 / "
               f"{len(out_text.splitlines())} 行")
 
-    # 远程集合校验：两个变体引用的集合完全一致，只抓一遍
+    # 远程集合校验：三个变体引用的集合完全一致，只抓一遍
     all_refs = sorted({r for _, refs in built.values() for r in refs})
     if not args.no_network:
         print(f"\n校验 {len(all_refs)} 个远程集合")

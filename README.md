@@ -1,39 +1,52 @@
 # shadowrocket-config
 
-个人小火箭（Shadowrocket）配置：**不存配置拷贝，存的是「上游 + 差异」**。每天从上游拉一次 `lazy_group.conf`，套用本仓库的覆盖规格，产出两份配置发布到 `release` 分支，小火箭通过链接订阅。
+这是小火箭配置的公开生成仓库。每天从 [johnshall 的 `lazy_group.conf`](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever) 取得上游配置，套用 `src/overrides.py` 的分流规格和 `src/selection.json` 的**试跑采样快照**，校验后发布三份配置到 `release` 分支。仓库及发布的配置只含分组名称和节点名筛选正则；`[Proxy]` 保持为空。节点连接地址、密码和订阅 URL 由各设备的小火箭 App 单独管理。
 
-节点不在这个仓库里，也不在配置里（`[Proxy]` 段是空的）——节点由小火箭 App 内的订阅管理。这里只管分流规则和策略组。
+## 三份配置
 
-## 两份配置
+| 文件 | 原 PROXY 分支 / FINAL 出口 | AI / 谷歌服务 | 适用方式 |
+| --- | --- | --- | --- |
+| `Shadowrocket-select.conf` | 内置 `PROXY` | 保留上游手动选项，默认 `PROXY` | 全部由设备首页手动选出口 |
+| `Shadowrocket-fallback.conf` | `速度` | **仅能选择 `稳定`** | 普通代理服务和 AI / 谷歌各自故障转移 |
+| `Shadowrocket-hybrid.conf` | 内置 `PROXY` | **仅能选择 `稳定`** | 普通代理服务手动选；AI / 谷歌自动故障转移 |
 
-| 文件 | 出口怎么定 | 什么时候用 |
-| --- | --- | --- |
-| `Shadowrocket-select.conf` | 上游原版逻辑：服务组都是 `select`，指向内置 `PROXY`，**出口由你在首页手动选** | 想完全跟着上游走、自己控制出口的场景 |
-| `Shadowrocket-fallback.conf` | 服务组指向自建的 `速度` / `稳定` 组，两者都是 `fallback`，**自动故障转移** | 想让 AI/谷歌走美国组、其余走东南亚组，且节点挂了自动切 |
+三份配置都包含 `速度`、`稳定`、香港、台湾、日本、新加坡、韩国、美国精选组，也会包含采样清单中新加的地区组，供用户手动选择。`速度` 和 `稳定` 是 `fallback`：按组内顺序使用当前可用节点，失效后回退，并不保证选到延迟最低的节点。正则只限定候选池，正则中的排列不指定优先级；实际顺序由设备中的节点列表决定。国家精选组是 `url-test`，使用 HTTPS gstatic 204，每 600 秒测试、5 秒超时、100 毫秒 tolerance；`fallback` 不设置 tolerance。`AI` / `谷歌服务` 在后两份配置里只有 `稳定` 一个选项，不会意外选到国家组或内置 `PROXY`。原有 `DIRECT` 选项、国内直连规则和规则顺序保留。原本以 `DIRECT` 为首项的服务组仍默认直连；表中的出口对应原 `PROXY` 分支与 `FINAL`，不会强制所有分类都代理。
 
-两者除了下面列的差异，其余完全相同（同一份上游、同一套规则集、同样的 tolerance）。
+订阅地址：
 
-```
-https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket-select.conf
-https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket-fallback.conf
-```
-
-国内直连 `raw.githubusercontent.com` 通常不通，用 jsDelivr 镜像（内容相同）：
-
-```
+```text
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-select.conf
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-hybrid.conf
 ```
 
-> ⚠️ **jsDelivr 对分支引用有缓存**，不清的话镜像可能滞后十几小时。所以流水线在每次发布后会调 `purge.jsdelivr.net` 清这两个文件的缓存。如果你手动改了 release 分支或想立刻生效，可以自己清一次：
-> ```bash
-> curl "https://purge.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf"
-> ```
-> 另外小火箭自己的自动更新间隔是 **1–7 天**（设置 > 自动更新 > 配置 > 更新间隔），所以就算这边每天构建，App 也是按它自己的节奏拉取。
+每份配置内的 `update-url` 都指回自己的同名订阅地址。小火箭「配置」→「+」可导入链接；更新后仍需核对 App 正在使用的配置、节点订阅和实际命中策略。jsDelivr 与小火箭本身均可能缓存，仓库每天重建不等于设备立即切换。
 
-小火箭里：底部「配置」→ 右上「+」→ 粘贴 URL → 下载后长按该配置 → 选中使用。
+## 采样快照的边界
 
-> ⚠️ 远程配置一旦更新，会**覆盖在 App 内对该配置所做的修改**（手册「更新配置」一节明确写了）。所以这两份配置不要在 App 里改，要改就改本仓库的 `src/overrides.py`。如果你的用法是「在 App 里手动微调」，那应该改用本地配置（见下面「和本地配置的关系」）。
+`src/selection.json` 是独立采集器产生的公开、无连接信息清单。它给 `速度` 和各地区组提供**精确锚定的节点名正则**，取代以前按国家关键词宽筛的规则。必须包含版本、`trial` 模式、生成时间、采样起止时间、至少三轮已完成采样、selection ID 和各组的匹配正则及节点数。生成器拒绝空组、无锚点或宽泛正则、非法分组名、逗号/换行、缺少既有地区组等情况；缺清单时构建直接失败，不退回到全节点筛选。
+
+当前清单只代表其 header 中标出的**试跑采样窗口**，不能称为满 24 小时或长期稳定性结论。每天的构建会继续使用这同一份时间标注的快照；**自动刷新清单尚未启用**。节点改名、订阅变化或原有稳定组三节点失效，都可能使组变空或与实际设备不符，需重新采样并复核。`稳定` 在 `src/overrides.py` 按现有主线、备用和第三节点的名称标签做整行匹配，发布前确认当前仅命中 3 个。两个名称含私有地址，公开正则只保留地址格式，不包含实际地址；以后同标签重复、节点改名仍需重新核对，不能保证任意订阅变化后永远恰好三个。
+
+配置本身不能证明小火箭已完成真实流量切换。短 HTTPS 探测也不能覆盖视频吞吐、长连接、地区限制或每台设备的实时网络；设备端仍负责当下可用性判断。
+
+## 构建与校验
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+python3 scripts/build.py
+python3 scripts/build.py --no-network
+```
+
+`--no-network` 需要之前留在 `dist/cache/` 的上游配置，仅用于离线检查。完整构建先核对上游结构锚点，再生成三变体，检查所有服务组和 `FINAL` 的目标、`AI` / `谷歌服务` 的严格边界、组引用及循环、`[Proxy]` 空段、更新 URL；之后联网逐个校验远程规则集。任一步失败，CI 不发布，`release` 保持上一版。单元测试使用合成规格，不依赖真实 `selection.json` 或节点凭据。
+
+规则集仍沿用原有转换：四处 Quantumult X 列表切换到小火箭版，其中拆分的域名集用 `DOMAIN-SET` 补全，缺失的通配域名用 `DOMAIN-WILDCARD` 显式补全。远程规则集 URL 从 GitHub raw 改写为 jsDelivr，构建时校验类型、空文件和 IP 规则的 `no-resolve`。jsDelivr 的分支缓存可能滞后，发布后工作流会尝试清理缓存。
+
+同一份 `Shadowrocket-fallback.conf` 继续作为 Karing 渲染器的输入；Karing 的 `currentSelected` / `urltest` 动作与小火箭的策略组语义并非完全相同，不能把这三种小火箭变体直接视为三个 Karing 配置。
+
+## 已知取舍与未验证项
+
+小火箭对远程规则集内部 `no-resolve` 是否逐条生效，以及 `DOMAIN-SET` 的子域匹配语义，仍需设备端验证。远程配置更新会覆盖设备内对该配置的本地编辑；有本地改动时应另存配置。
 
 ## 为什么不直接存一份配置
 
@@ -43,7 +56,7 @@ https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fall
 
 ## 覆盖规格改了什么
 
-全部改动都在 `src/overrides.py`，逐项都有注释。三类：
+分流规格在 `src/overrides.py`，采样名单在 `src/selection.json`。以下保留既有规则差异说明；具体条目数是原验收时的历史记录，以最新构建报告为准。
 
 ### 1. 规则集方言：4 处圈X 引用 → 小火箭版
 
@@ -83,7 +96,7 @@ schwab.com.cn  skytigris.cn  steamconnecttest.com  tigerbbs.cn  zhijianfengyi.cn
 
 ### 2. 分组调参
 
-- **所有组的 `tolerance` 统一改成 100**（上游是 0 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。这是 `url-test`「择优」用的参数——所以只作用于上游那 6 个国家组；`select` 不测速、`fallback` 按可用性切换，两者都不涉及，不给它们新增。
+- **所有组的 `tolerance` 统一改成 100**（上游是 0 混着的）。含义是：只有新优胜者的延迟比旧优胜者低出 100ms 以上，才切换节点。这是 `url-test`「择优」用的参数——所以作用于采样清单中的国家组；`select` 不测速、`fallback` 按可用性切换，两者都不涉及，不给它们新增。
 - **删掉所有 `policy-select-name`**，回到上游的位置默认机制（`select=0` = 成员列表里的第 1 个）。按名字指定默认项的问题是名字写错了也看不出来，位置默认至少行为一致。
 
 ### 2b. 规则集走 jsDelivr 而不是 raw.githubusercontent.com
@@ -116,35 +129,6 @@ https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
 
 注意 jsDelivr 对分支引用有缓存（最长十几小时），所以规则集内容可能比上游晚半天。规则集本身每日更新，这个延迟可以接受；要立刻生效可以手动 purge。
 
-### 3. 自建组（只用于 `Shadowrocket-fallback.conf`）
-
-新增两个组，并把上游指向内置 `PROXY` 的地方改指向它们：
-
-```
-速度 = fallback,policy-regex-filter=🇸🇬|SG|Singapore|新加坡|狮城|沪新|京新|深新|杭新|广新|🇲🇾|Malaysia|马来|马来西亚,interval=600,timeout=3,url=http://www.gstatic.com/generate_204
-稳定 = fallback,policy-regex-filter=Grande|GRANDE|BZ-VMess|BZ-VMESS,interval=600,timeout=5,url=http://www.gstatic.com/generate_204
-```
-
-替换规则：**默认把所有 `PROXY` 换成 `速度`，`AI` 和 `谷歌服务` 两处换成 `稳定`**。用模式匹配而不是行号，所以上游以后新增的服务分组只要指向 `PROXY`，会自动一起改。
-
-两条正则都拿本机 115 个真实节点名验证过命中集合：`速度` 命中 14 个（含另一个订阅的 4 个 `🇸🇬Singapore 0N`），`稳定` 精确命中原来的 3 个。
-
-**两个组都是 `fallback`，不配 `tolerance`。** `fallback` 的语义是「节点不可用时切到其他可用节点，可用范围由上次测试结果决定」，它按可用性切换、不做择优比较，所以 `tolerance` 对它是无效参数（手册里 `tolerance` 的定义是「只有当新优胜者的分数高于旧优胜者加公差时才换线」，「优胜者」是 `url-test` 的概念）。对比一下：
-
-- `url-test`：自动切换**延迟最低**的节点——会为了快而换线。
-- `fallback`：只在这一档不可用时才换——稳定优先。
-
-⚠️ **`fallback` 取的是「筛出来的第一个可用节点」，所以成员顺序就是优先级。** 用正则筛选时，顺序是订阅里节点的排列顺序，不是人工指定的顺序。如果你希望优先用某几个节点，要么改成显式成员列表（按优先级排列），要么加 `policy-select-name=<节点名>` 指定默认选中项。
-
-上游的 `select` 服务组保持不变——所以「出口类别」是你定的（AI 走稳定、YouTube 走速度），「类别内部」按 `fallback` 的可用性逻辑自动切换。
-
-⚠️ **`稳定` 组这条正则绑在供应商标签上**（`Grande`、`BZ-VMess`），供应商改名后这个组会变空，AI 和谷歌服务就没有可用出口了。想彻底免疫就换成按地区筛，代价是包含订阅里所有美国节点：
-
-```
-稳定 = fallback,policy-regex-filter=🇺🇸|US|USA|United States|美国,...
-```
-
-另外这两个标签会出现在公开仓库里（只是名字，不含地址和密钥）。介意的话换成地区筛。
 
 ## 和本地配置的关系
 
@@ -179,7 +163,7 @@ Karing 的规则动作只有四种（`direct` / `block` / `urltest` / `currentSe
 | `速度`（默认代理组） | `urltest`（Karing 的「自动选择」） |
 | `稳定`（例外代理组） | `currentSelected`（Karing 的「当前选择」） |
 
-**这意味着「AI 走美国、其余走东南亚」在 Karing 里只能做成两档**：AI/谷歌那几条走 `currentSelected`，需要你在首页把 `稳定` 选中；其余走 `urltest`，节点池用「服务器选择关键词」限定成 `速度` 那批。
+**这意味着「AI 走稳定、其余走速度」在 Karing 里只能做成两档**：AI/谷歌那几条走 `currentSelected`，需要你在首页手动选合适的稳定出口；其余走 `urltest`，节点池用「服务器选择关键词」限定成 `速度` 那批。
 
 规则集是从 blackmatrix7 的列表机械转换的（`DOMAIN-SUFFIX`→`domain_suffix`、`DOMAIN-WILDCARD`→`domain_regex`、`IP-CIDR`→`ip_cidr`）。三种类型在 sing-box 规则集里没有对应字段，会被丢弃并在构建输出里点名：`USER-AGENT`（130 条）、`IP-ASN`（7 条）、`URL-REGEX`（1 条）。
 
@@ -189,62 +173,6 @@ Karing 的规则动作只有四种（`direct` / `block` / `urltest` / `currentSe
 
 JSON 末尾有一条**默认关闭**的 `🧪 测试-分组定向`，它的 `outbound` 直接写分组名 `稳定` 而不是四个常量之一。Karing 的界面代码只对四个常量做显示映射，所以这条是为了验证：**Karing 到底接不接受任意分组名**。如果接受，分组粒度就能做满，上面那个「只能两档」的限制就不存在了。测试办法：导入后把它打开，看它显示成什么、以及分流规则检测里 `claude.ai` 命中它之后走的是哪个出口。
 
-## 日常怎么改
-
-只改 `src/overrides.py`，然后 commit 到 `main`。工作流会：
-
-1. 拉上游 `lazy_group.conf`，检查锚点；
-2. 生成两个变体，自检「不该再有圈X 引用」「custom 变体不该再有裸 `PROXY` 策略」；
-3. 把配置里所有远程规则集拉下来逐条校验（类型名是否认识、是否为空、IP 规则有没有 `no-resolve`）；
-4. 检查 `[Rule]` 引用的策略名是否真的在 `[Proxy Group]` 里定义过，以及每个 `policy-regex-filter` 是不是合法正则；
-5. 全部通过才发布到 `release`。
-
-**任一步失败就不发布**，`release` 停在上一版。失败原因在 Actions 运行页的 Summary 里，同时列出每个规则集的条目数。
-
-本地也可以先跑：
-
-```bash
-python3 scripts/build.py                    # 拉上游 + 校验 + 生成两份配置
-python3 scripts/build.py --no-network       # 用上次抓到的上游缓存，不联网
-python3 scripts/build.py --out-dir /tmp/x   # 换输出目录
-```
-
-输出是 (上游内容, 规格) 的**纯函数**——同样输入逐字节产出同样结果，上游和规格都没变就不产生新提交。
-
-## 已知取舍与未验证项
-
-- **没有实测**小火箭是否真的逐条 honor 远程规则集文件内部的 `no-resolve`。上游 README 和配置注释都指向「是」，但没法在没有设备的情况下跑实验。自测办法见下。
-- **`DOMAIN-SET` 的匹配语义**（是否含子域）没有实测，只按上游官方建议的 `X.list` + `X_Domain.list` 配对写法使用。
-- `no-resolve` 对 China 分类没有副作用，因为配置里 `GEOIP,CN,DIRECT` 紧随其后，CN 的 IP 仍然会被兜住。
-- 规则集**不镜像到本仓库**，生成时把上游的 raw 地址改写成 jsDelivr 直取（见 2b）。所以规则内容永远跟随上游最新，仓库保持轻量；代价是规则集内容可能比上游晚半天（jsDelivr 分支缓存），且万一某个仓库 jsDelivr 不服务，构建会失败。上游改目录结构时同样会在构建失败——这是刻意的，不会静默产出错配置。
-- 仓库里不含任何节点地址、密码或订阅地址。`稳定` 组正则里的 `Grande`、`BZ-VMess` 是节点名片段（见上）。
-
-## 自测办法
-
-小火箭里：配置详情 →「测试规则」→ 输入域名，看命中哪条策略。建议试：
-
-| 输入 | 期望 |
-| --- | --- |
-| `iphone.com` | 苹果服务（验证 `DOMAIN-WILDCARD` 通配规则生效） |
-| `www.apple.com` | 苹果服务（验证 `DOMAIN-SET` 的 `Apple_Domain.list` 生效） |
-| `www.baidu.com` | DIRECT（验证 `China_Domain.list` 生效） |
-| `www.google.com` | 谷歌服务（验证 Global 之前的规则仍然优先） |
-| `futu.cn` | 速度（`Shadowrocket-fallback.conf`；这是上面说的那 10 条变化之一） |
-
-再确认一下 `Shadowrocket-fallback.conf` 里两个组真的筛到了节点：配置详情 →「代理分组」，看 `速度` 有几个成员、`稳定` 是不是 3 个。
-
-## 目录结构
-
-```
-src/overrides.py               覆盖规格，唯一需要手工维护的东西
-scripts/build.py               拉上游 + 套规格 + 校验 + 生成小火箭配置
-scripts/render_karing.py       把同一份结果渲染成 Karing 的分流分组 + sing-box 规则集
-scripts/summary.py             把构建报告渲染成 Actions 运行摘要
-dist/                          本地构建产物（不提交）
-.github/workflows/build.yml    每日 UTC 23:00 / push 时构建，发布到 release
-```
-
-`release` 分支放两份小火箭配置 + `karing/`（分流分组 JSON 与规则集）。
 
 ## 上游依赖
 

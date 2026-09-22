@@ -1,7 +1,7 @@
-"""覆盖规格：从上游 lazy_group.conf 生成配置时要做的全部改动。
+"""覆盖规格：从上游 lazy_group.conf 与采样清单生成三份配置。
 
-这个文件是仓库里唯一需要手工维护的东西。build.py 每天拉一次上游的
-lazy_group.conf，按这里的规则改，产出两份配置发布到 release 分支。
+build.py 每天拉一次上游的 lazy_group.conf，按这里的规则改，再读取
+src/selection.json 中的精确节点名正则，产出三份配置发布到 release 分支。
 
 为什么不是直接存一份完整配置：上游对配置结构的改进（新增服务、调整规则
 顺序、更新注释）会持续发生。存拷贝的话这些改进永远进不来，只有规则集内容
@@ -152,10 +152,9 @@ _RAW_BASE = "https://raw.githubusercontent.com/"
 _JSD_BASE = "https://cdn.jsdelivr.net/gh/"
 
 # --------------------------------------------------------------------------- #
-# 3. 自建组（只用于 custom 变体）
+# 3. 自建组（全部变体）
 # --------------------------------------------------------------------------- #
-# 把上游指向内置 PROXY 的地方改指向这两个组。底层节点由正则从订阅里筛，
-# 订阅换代不用改配置。
+# 速度、国家组的正则来自采样清单，不在代码里按国家宽筛。
 #
 # 两个组都是 fallback：节点不可用时才切换到下一个可用节点，不追最快。
 # 这里不要配 tolerance —— 手册里 tolerance 是「只有当新优胜者的分数高于
@@ -165,46 +164,39 @@ _JSD_BASE = "https://cdn.jsdelivr.net/gh/"
 # 注意 fallback 取的是「筛出来的第一个可用节点」，所以成员顺序即优先级。
 # 用正则筛选时，顺序是订阅里节点的排列顺序，不是人工指定的顺序。
 #
-# 正则都拿本机 115 个真实节点名验证过命中集合：速度 命中 14 个（含另一个
-# 订阅的 4 个 🇸🇬Singapore 0N），稳定 精确命中原来的 3 个。
-
-EXTRA_GROUPS = [
-    "速度 = fallback,"
-    "policy-regex-filter=🇸🇬|SG|Singapore|新加坡|狮城|沪新|京新|深新|杭新|广新"
-    "|🇲🇾|Malaysia|马来|马来西亚,"
-    "interval=600,timeout=3,"
-    "url=http://www.gstatic.com/generate_204",
-
-    "稳定 = fallback,"
-    "policy-regex-filter=Grande|GRANDE|BZ-VMess|BZ-VMESS,"
-    "interval=600,timeout=5,"
-    "url=http://www.gstatic.com/generate_204",
-]
-
-# 默认把所有 PROXY 换成 速度；这些分组例外，换成 稳定。
-# （AI 和谷歌服务走美国故障转移组，其余走「最快东南亚」组。）
-PROXY_TARGET_DEFAULT = "速度"
-PROXY_TARGET_PER_GROUP = {
-    "AI": "稳定",
-    "谷歌服务": "稳定",
+# 名称含私有地址，只公开主线/备用标签与地址格式；发布前核对当前仅匹配3个。
+STABLE_PATTERN = '(?i)^(?:BZ\\-VMess\\-TLS|美国\\ Grande\\&RCN\\ [0-9]+(?:\\.[0-9]+){3}\\ ·\\ 主线|美国\\ Grande\\&RCN\\ [0-9]+(?:\\.[0-9]+){3}\\ ·\\ 备用)$'
+PROBE_URL = "https://www.gstatic.com/generate_204"
+PROBE_INTERVAL = 600
+PROBE_TIMEOUT = 5
+STABLE_ONLY_SERVICES = {"AI", "谷歌服务"}
+REQUIRED_SAMPLED_GROUPS = {
+    "速度", "香港节点", "台湾节点", "日本节点", "新加坡节点", "韩国节点", "美国节点",
 }
+RELEASE_URL_BASE = "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/"
 
 # --------------------------------------------------------------------------- #
 # 变体
 # --------------------------------------------------------------------------- #
-# 两份配置的差别是「出口怎么定」，文件名按这个机制命名：
-#   select   —— 服务组是 select 类型，指向内置 PROXY，出口由你在首页手动选
-#   fallback —— 服务组指向自建的 速度/稳定 组，两者都是 fallback，自动故障转移
+# 三份配置的差别是「默认出口怎么定」；AI/谷歌在后两份仅可选稳定。
 
 VARIANTS = [
     {
         "id": "Shadowrocket-select",
-        "title": "上游原版逻辑 · 出口在首页手动选（PROXY）",
-        "substitute_proxy": False,
+        "title": "手动选择出口（PROXY）",
+        "default_policy": "PROXY",
+        "strict_stable": False,
     },
     {
         "id": "Shadowrocket-fallback",
-        "title": "自建速度/稳定组 · 自动故障转移（fallback）",
-        "substitute_proxy": True,
+        "title": "速度/稳定自动故障转移（fallback）",
+        "default_policy": "速度",
+        "strict_stable": True,
+    },
+    {
+        "id": "Shadowrocket-hybrid",
+        "title": "AI/谷歌稳定故障转移，其余手动出口",
+        "default_policy": "PROXY",
+        "strict_stable": True,
     },
 ]
