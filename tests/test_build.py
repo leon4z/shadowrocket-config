@@ -1,6 +1,11 @@
 import importlib.util
+import contextlib
+import io
 from pathlib import Path
+import re
+import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec_file = importlib.util.spec_from_file_location("build_under_test", ROOT / "scripts" / "build.py")
@@ -35,13 +40,14 @@ def sections(variant):
 
 
 class BuildTest(unittest.TestCase):
-    def test_three_variants_route_as_requested_and_share_curated_groups(self):
+    def test_six_variants_route_as_requested_and_use_separate_pools(self):
         self.assertEqual([v["id"] for v in spec.VARIANTS], [
-            "Shadowrocket-select", "Shadowrocket-fallback", "Shadowrocket-hybrid"])
+            "Shadowrocket-select", "Shadowrocket-fallback", "Shadowrocket-hybrid",
+            "leon4z-select", "leon4z-fallback", "leon4z-hybrid"])
         for variant in spec.VARIANTS:
             with self.subTest(variant=variant["id"]):
                 content = sections(variant)
-                groups = build.validate_variant(content, spec, variant, selection())
+                groups = build.validate_variant(content, spec, variant, selection(), upstream())
                 build.validate_rules(content, groups)
                 definitions = dict(build.split_params(line) for line in build.effective(content["proxy group"]))
                 target = variant["default_policy"]
@@ -52,11 +58,17 @@ class BuildTest(unittest.TestCase):
                 self.assertEqual(definitions["速度"][0], "fallback")
                 self.assertEqual(definitions["稳定"][0], "fallback")
                 self.assertNotIn("tolerance=100", definitions["速度"])
-                self.assertEqual(definitions["澳大利亚节点"][0], "url-test")
-                self.assertIn("tolerance=100", definitions["澳大利亚节点"])
-                self.assertIn("url=https://www.gstatic.com/generate_204", definitions["澳大利亚节点"])
-                self.assertEqual(definitions["澳大利亚节点"][1],
-                                 "policy-regex-filter=(?i)^(?:Sydney\\x2c01)$")
+                if variant["audience"] == "personal":
+                    self.assertEqual(definitions["澳大利亚节点"][0], "url-test")
+                    self.assertIn("tolerance=100", definitions["澳大利亚节点"])
+                    self.assertIn("url=https://www.gstatic.com/generate_204", definitions["澳大利亚节点"])
+                    self.assertEqual(definitions["澳大利亚节点"][1],
+                                     "policy-regex-filter=(?i)^(?:Sydney\\x2c01)$")
+                    self.assertIn(f"policy-regex-filter={spec.STABLE_PATTERN}", definitions["稳定"])
+                else:
+                    self.assertNotIn("澳大利亚节点", definitions)
+                    self.assertIn("policy-regex-filter=US|SG", definitions["美国节点"])
+                    self.assertIn("policy-regex-filter=(?!)", definitions["稳定"])
                 self.assertFalse(build.effective(content["proxy"]))
                 self.assertIn(f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf",
                               build.effective(content["general"]))
@@ -96,17 +108,66 @@ class BuildTest(unittest.TestCase):
         with self.assertRaises(build.Failure):
             build.load_selection(spec, str(ROOT / "tests" / "missing-selection.json"))
 
+    def test_generic_ignores_personal_data_and_empty_stable_matches_nothing(self):
+        for variant in spec.VARIANTS[:3]:
+            without = build.transform(upstream(), spec, variant, None)
+            self.assertEqual(without, build.transform(upstream(), spec, variant, selection()))
+            self.assertNotIn("NodeA", "\n".join(without))
+            self.assertNotIn(spec.STABLE_PATTERN, "\n".join(without))
+            for name in ("", "US server", "NodeA", "稳定节点", "BZ-VMess-TLS"):
+                self.assertIsNone(re.search(spec.GENERIC_STABLE_PATTERN, name))
+            build.validate_variant(build.parse_sections(without), spec, variant, None, upstream())
+        for variant in spec.VARIANTS[3:]:
+            with self.assertRaises(build.Failure):
+                build.transform(upstream(), spec, variant, None)
+
+    def test_generic_cli_does_not_load_selection_and_writes_only_three_files(self):
+        # Complete synthetic anchors, including the four rule-set replacements.
+        fixture = upstream().replace("FINAL,PROXY", "\n".join(
+            [f"RULE-SET,{d['qx']},PROXY" for d in spec.RULESET_DIALECT] + ["FINAL,PROXY"]))
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(build, "ROOT", directory), \
+             patch.object(build, "load_selection", side_effect=AssertionError("must not load personal data")), \
+             patch.object(build, "fetch", return_value=fixture), \
+             patch.object(build, "check_ruleset", return_value={"rules": 1, "ip": 0, "ip_no_resolve": 0}), \
+             patch.object(build, "check_domainset", return_value={"domains": 1}), \
+             patch("sys.argv", ["build.py", "--audience", "generic"]), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(build.main(), 0)
+            outputs = list((Path(directory) / "dist").glob("*.conf"))
+            self.assertEqual(len(outputs), 3)
+            for output in outputs:
+                self.assertTrue(output.name.startswith("Shadowrocket-"))
+                self.assertNotIn("试跑快照", output.read_text())
+
+    def test_speed_limit_ten_does_not_cap_country_groups(self):
+        manifest = selection()
+        manifest["groups"]["速度"]["node_count"] = 10
+        manifest["groups"]["香港节点"]["node_count"] = 50
+        build.validate_selection(manifest, spec)
+        manifest["groups"]["速度"]["node_count"] = 11
+        with self.assertRaises(build.Failure):
+            build.validate_selection(manifest, spec)
+
+    def test_new_upstream_region_works_generically_but_needs_personal_samples(self):
+        changed = upstream().replace("[Rule]", "加拿大节点 = url-test,policy-regex-filter=Canada\n[Rule]")
+        generic, personal = spec.VARIANTS[0], spec.VARIANTS[3]
+        output = build.transform(changed, spec, generic, None)
+        self.assertIn("加拿大节点", build.validate_variant(build.parse_sections(output), spec, generic, None, changed))
+        with self.assertRaises(build.Failure):
+            build.transform(changed, spec, personal, selection())
+
     def test_proxy_data_and_missing_or_cyclic_group_rejected(self):
         variant = spec.VARIANTS[1]
         manifest = selection()
         content = sections(variant)
         content["proxy"].append("node = trojan,example.invalid,443,password=secret")
         with self.assertRaises(build.Failure):
-            build.validate_variant(content, spec, variant, manifest)
+            build.validate_variant(content, spec, variant, manifest, upstream())
         content = sections(variant)
         content["proxy group"] = [line for line in content["proxy group"] if not line.startswith("速度 = ")]
         with self.assertRaises(build.Failure):
-            build.validate_variant(content, spec, variant, manifest)
+            build.validate_variant(content, spec, variant, manifest, upstream())
         content = sections(variant)
         content["proxy group"].append("Bad = select,Missing")
         with self.assertRaises(build.Failure):
@@ -123,11 +184,20 @@ class BuildTest(unittest.TestCase):
         content["proxy group"] = [line.replace("AI = select,稳定", "AI = select,稳定,美国节点")
                                   for line in content["proxy group"]]
         with self.assertRaises(build.Failure):
-            build.validate_variant(content, spec, variant, manifest)
+            build.validate_variant(content, spec, variant, manifest, upstream())
         content = sections(variant)
         content["rule"] = [line.replace("FINAL,PROXY", "FINAL,速度") for line in content["rule"]]
         with self.assertRaises(build.Failure):
-            build.validate_variant(content, spec, variant, manifest)
+            build.validate_variant(content, spec, variant, manifest, upstream())
+
+    def test_empty_stable_cannot_silently_gain_direct_or_proxy_members(self):
+        for variant in spec.VARIANTS[:3]:
+            for extra in ("DIRECT", "PROXY", "policy-regex-filter=.*"):
+                content = sections(variant)
+                content["proxy group"] = [line + "," + extra if line.startswith("稳定 = ") else line
+                                          for line in content["proxy group"]]
+                with self.assertRaises(build.Failure):
+                    build.validate_variant(content, spec, variant, None, upstream())
 
 
 if __name__ == "__main__":

@@ -1,16 +1,26 @@
 # shadowrocket-config
 
-这是小火箭配置的公开生成仓库。每天从 [johnshall 的 `lazy_group.conf`](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever) 取得上游配置，套用 `src/overrides.py` 的分流规格和 `src/selection.json` 的**试跑采样快照**，校验后发布三份配置到 `release` 分支。仓库及发布的配置只含分组名称和节点名筛选正则；`[Proxy]` 保持为空。节点连接地址、密码和订阅 URL 由各设备的小火箭 App 单独管理。
+这是小火箭配置的公开生成仓库。每天从 [johnshall 的 `lazy_group.conf`](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever) 取得上游配置，套用 `src/overrides.py` 的分流规格，校验后发布**通用版与个人版各三份配置**到 `release` 分支。只有个人版读取 `src/selection.json` 的试跑采样快照。仓库及发布的配置只含分组名称和节点名筛选正则；`[Proxy]` 保持为空。节点连接地址、密码和订阅 URL 由各设备的小火箭 App 单独管理。
 
-## 三份配置
+## 两组、六份配置
 
-| 文件 | 原 PROXY 分支 / FINAL 出口 | AI / 谷歌服务 | 适用方式 |
-| --- | --- | --- | --- |
-| `Shadowrocket-select.conf` | 内置 `PROXY` | 保留上游手动选项，默认 `PROXY` | 全部由设备首页手动选出口 |
-| `Shadowrocket-fallback.conf` | `速度` | **仅能选择 `稳定`** | 普通代理服务和 AI / 谷歌各自故障转移 |
-| `Shadowrocket-hybrid.conf` | 内置 `PROXY` | **仅能选择 `稳定`** | 普通代理服务手动选；AI / 谷歌自动故障转移 |
+| 模式 | 通用版文件 | 个人版文件 | 原 PROXY 分支 / FINAL | AI / 谷歌服务 |
+| --- | --- | --- | --- | --- |
+| 手动 | `Shadowrocket-select.conf` | `leon4z-select.conf` | 内置 `PROXY`，跟随首页选择 | 保留手动选项，默认 `PROXY` |
+| 自动 | `Shadowrocket-fallback.conf` | `leon4z-fallback.conf` | `速度` fallback | **仅能选择 `稳定`** fallback |
+| 混合 | `Shadowrocket-hybrid.conf` | `leon4z-hybrid.conf` | 内置 `PROXY`，跟随首页选择 | **仅能选择 `稳定`** fallback |
 
-三份配置都包含 `速度`、`稳定`、香港、台湾、日本、新加坡、韩国、美国精选组，也会包含采样清单中新加的地区组，供用户手动选择。`速度` 和 `稳定` 是 `fallback`：按组内顺序使用当前可用节点，失效后回退，并不保证选到延迟最低的节点。正则只限定候选池，正则中的排列不指定优先级；实际顺序由设备中的节点列表决定。国家精选组是 `url-test`，使用 HTTPS gstatic 204，每 600 秒测试、5 秒超时、100 毫秒 tolerance；`fallback` 不设置 tolerance。`AI` / `谷歌服务` 在后两份配置里只有 `稳定` 一个选项，不会意外选到国家组或内置 `PROXY`。原有 `DIRECT` 选项、国内直连规则和规则顺序保留。原本以 `DIRECT` 为首项的服务组仍默认直连；表中的出口对应原 `PROXY` 分支与 `FINAL`，不会强制所有分类都代理。
+六份配置都包含 `速度`、`稳定` 和地区组，供手动选择。两种受众的候选来源不同：
+
+| 组 | 通用版 | leon4z 个人版 |
+| --- | --- | --- |
+| 速度 | 上游各地区关键词匹配的节点并集，无采样保证、无 10 个上限 | 本地历史筛选并复测通过的跨地区节点，最多 **10 个**，尽量覆盖两个来源 |
+| 国家 / 地区 | 沿用上游的地区名称、关键词和旗帜匹配 | 该地区**全部通过本次筛选与复测的节点**，取消每区 3 个上限；有合格节点才新增地区 |
+| 稳定 | **默认空**，用户先指定自己的稳定节点 | 用户原先指定的 **3 个**，不按测速排名替换 |
+
+`速度` 和 `稳定` 是 `fallback`：按组内顺序使用当前可用节点，失效后回退，并不保证选到延迟最低的节点。正则只限定候选池，排列不指定优先级；实际顺序由设备中的节点列表决定。地区组是 `url-test`。两类自动组都使用 HTTPS gstatic 204、600 秒间隔、5 秒超时；仅 `url-test` 有 100 毫秒 tolerance。自动和混合模式的 `AI` / `谷歌服务` 只有 `稳定` 一个选项。原有 `DIRECT` 选项、国内直连规则和规则顺序保留；原本以 `DIRECT` 为首项的服务组仍默认直连，不会强制全部服务代理。这里的手动版指服务出口由用户选择，用户也可主动选用某个自动组。
+
+**旧地址的含义已调整：`Shadowrocket-*` 现在是通用版。使用个人采样名单的设备，请改订阅对应的 `leon4z-*` 地址。**
 
 订阅地址：
 
@@ -18,13 +28,26 @@
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-select.conf
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-hybrid.conf
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/leon4z-select.conf
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/leon4z-fallback.conf
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/leon4z-hybrid.conf
 ```
 
 每份配置内的 `update-url` 都指回自己的同名订阅地址。小火箭「配置」→「+」可导入链接；更新后仍需核对 App 正在使用的配置、节点订阅和实际命中策略。jsDelivr 与小火箭本身均可能缓存，仓库每天重建不等于设备立即切换。
 
-## 采样快照的边界
+## 通用版：先指定稳定节点
 
-`src/selection.json` 是独立采集器产生的公开、无连接信息清单。它给 `速度` 和各地区组提供**精确锚定的节点名正则**，取代以前按国家关键词宽筛的规则。必须包含版本、`trial` 模式、生成时间、采样起止时间、至少三轮已完成采样、selection ID 和各组的匹配正则及节点数。生成器拒绝空组、无锚点或宽泛正则、非法分组名、逗号/换行、缺少既有地区组等情况；缺清单时构建直接失败，不退回到全节点筛选。
+通用版不预设任何人的稳定节点，`稳定` 的筛选条件为 `(?!)`（不匹配任何名称）。使用自动或混合模式前，先配置这个组；手动版默认走首页选择，可先使用。空组在不同 Shadowrocket 版本中的实际流量行为仍需设备验证，不把它当成阻断或隐私保护机制。
+
+推荐操作：下载配置后另存本地副本，删除或注释 `[General]` 的 `update-url`，再把 `稳定` 组的 `policy-regex-filter` 改成自己选中的节点名正则。保留组类型 `fallback`；不要直接省略过滤条件。比如两个虚构节点 `My Stable A`、`My Stable B` 对应 `(?i)^(?:My Stable A|My Stable B)$`。实际名称含正则特殊符号时需转义，逗号写为 `\x2c`。节点仍由 App 内的节点订阅管理，不填入公开的 `[Proxy]`。
+
+远程配置更新会覆盖本地编辑；取消 `update-url` 后，远程规则集仍可更新，但整份配置结构不再跟随本仓库自动更新。这是 [LOWERTOP 社区手册的自动更新说明](https://github.com/LOWERTOP/Shadowrocket/wiki) 所描述的本地配置方式。需要整份配置自动更新的使用者，可 fork 仓库，在自己的规格中设置稳定筛选后自行发布；本仓库的通用稳定组会一直保持空。扩展配置的同名组覆盖语义尚未实机确认，不据此承诺保留手动成员。
+
+## 个人版：采样快照的边界
+
+`src/selection.json` 是独立采集器产生的公开、无连接信息清单。它给个人版 `速度` 和各地区组提供**精确锚定的节点名正则**。试跑从最近 24 小时已完成轮次中筛选：至少三轮、覆盖至少 30 分钟、最近三轮齐全、历史有效目标全部成功、成功请求 P95 小于 5 秒，且订阅源健康、刷新不超过 36 小时。候选还须匹配当前客户端连接身份与名称，排除名称冲突和敏感名称；发布前按当前客户端参数复测 gstatic、Cloudflare、GitHub 三个 HTTPS 目标。速度池按 P95 排序取最多 10 个并尽量保留来源多样性，地区池保留全部合格者。“全部”指通过这些门槛，并非只要某一次连通过就纳入。一次探测通过不能证明 AI 账号、地区解锁或长连接可用。
+
+清单必须包含版本、`trial` 模式、生成时间、采样窗口、至少三轮、selection ID 和各组的精确正则及节点数。生成器拒绝空组、宽泛正则、非法名称、逗号/换行、缺少既有地区组以及个人速度超过 10 个等情况；缺清单时个人版构建失败，不退回全节点。通用版可独立生成，不读取此文件。
 
 当前清单只代表其 header 中标出的**试跑采样窗口**，不能称为满 24 小时或长期稳定性结论。每天的构建会继续使用这同一份时间标注的快照；**自动刷新清单尚未启用**。节点改名、订阅变化或原有稳定组三节点失效，都可能使组变空或与实际设备不符，需重新采样并复核。`稳定` 在 `src/overrides.py` 按现有主线、备用和第三节点的名称标签做整行匹配，发布前确认当前仅命中 3 个。两个名称含私有地址，公开正则只保留地址格式，不包含实际地址；以后同标签重复、节点改名仍需重新核对，不能保证任意订阅变化后永远恰好三个。
 
@@ -36,13 +59,16 @@ https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-hybr
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 python3 scripts/build.py
 python3 scripts/build.py --no-network
+python3 scripts/build.py --audience generic --out-dir dist/generic-only
 ```
 
-`--no-network` 需要之前留在 `dist/cache/` 的上游配置，仅用于离线检查。完整构建先核对上游结构锚点，再生成三变体，检查所有服务组和 `FINAL` 的目标、`AI` / `谷歌服务` 的严格边界、组引用及循环、`[Proxy]` 空段、更新 URL；之后联网逐个校验远程规则集。任一步失败，CI 不发布，`release` 保持上一版。单元测试使用合成规格，不依赖真实 `selection.json` 或节点凭据。
+`--no-network` 需要之前留在 `dist/cache/` 的上游配置，仅用于离线检查。完整构建先核对上游结构锚点，再生成六变体，检查服务组和 `FINAL`、`AI` / `谷歌服务` 严格边界、受众各自的候选正则、组引用及循环、空 `[Proxy]`、同名更新 URL；之后联网逐个校验远程规则集。任一步失败，CI 不发布，`release` 保持上一版。单元测试使用合成规格，不依赖真实采样或节点凭据，包含移除个人数据后的通用版独立构建。
+
+当前 CI 把六份配置作为一次完整发布：个人清单无效时，通用版也保留上一版。这里的“通用不依赖个人采样”指配置内容和独立构建能力；尚未拆成两条可分别发布的流水线。需要单独采用通用版时使用 `--audience generic`。
 
 规则集仍沿用原有转换：四处 Quantumult X 列表切换到小火箭版，其中拆分的域名集用 `DOMAIN-SET` 补全，缺失的通配域名用 `DOMAIN-WILDCARD` 显式补全。远程规则集 URL 从 GitHub raw 改写为 jsDelivr，构建时校验类型、空文件和 IP 规则的 `no-resolve`。jsDelivr 的分支缓存可能滞后，发布后工作流会尝试清理缓存。
 
-同一份 `Shadowrocket-fallback.conf` 继续作为 Karing 渲染器的输入；Karing 的 `currentSelected` / `urltest` 动作与小火箭的策略组语义并非完全相同，不能把这三种小火箭变体直接视为三个 Karing 配置。
+Karing 渲染器跟随原个人版，输入改为 `leon4z-fallback.conf`；其动作与小火箭的策略组语义并非完全相同，不能把这六份配置视为六份 Karing 配置。
 
 ## 已知取舍与未验证项
 
@@ -132,7 +158,7 @@ https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
 
 ## 和本地配置的关系
 
-如果你更想在 App 里手动微调配置，那**不要用这里的订阅**——远程配置的更新会覆盖本地修改。手册 `自动更新` 一节给了两种「既要自动更新又不丢自定义」的官方做法：
+若要在 App 里手动微调配置，请参考上面的通用版步骤保存本地副本。远程配置更新会覆盖本地修改；社区手册列出了以下自定义方式：
 
 - **删掉/注释掉 `update-url = *`**：配置变成「本地配置」，自动更新只刷新规则集，不动配置本身。
 - **用扩展配置/包含配置**（`include = `，配置文件 ⓘ > 通用 > 包含配置）：b 包含 a，b 优先级更高，自定义放 b。

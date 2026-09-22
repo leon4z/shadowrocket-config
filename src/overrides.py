@@ -1,7 +1,7 @@
-"""覆盖规格：从上游 lazy_group.conf 与采样清单生成三份配置。
+"""覆盖规格：生成三份通用配置与三份个人配置。
 
 build.py 每天拉一次上游的 lazy_group.conf，按这里的规则改，再读取
-src/selection.json 中的精确节点名正则，产出三份配置发布到 release 分支。
+个人版读取 src/selection.json 的精确节点名正则；通用版仅依赖上游。
 
 为什么不是直接存一份完整配置：上游对配置结构的改进（新增服务、调整规则
 顺序、更新注释）会持续发生。存拷贝的话这些改进永远进不来，只有规则集内容
@@ -154,7 +154,7 @@ _JSD_BASE = "https://cdn.jsdelivr.net/gh/"
 # --------------------------------------------------------------------------- #
 # 3. 自建组（全部变体）
 # --------------------------------------------------------------------------- #
-# 速度、国家组的正则来自采样清单，不在代码里按国家宽筛。
+# 个人版速度、国家组来自采样清单；通用版沿用上游地区关键词。
 #
 # 两个组都是 fallback：节点不可用时才切换到下一个可用节点，不追最快。
 # 这里不要配 tolerance —— 手册里 tolerance 是「只有当新优胜者的分数高于
@@ -166,6 +166,9 @@ _JSD_BASE = "https://cdn.jsdelivr.net/gh/"
 #
 # 名称含私有地址，只公开主线/备用标签与地址格式；发布前核对当前仅匹配3个。
 STABLE_PATTERN = '(?i)^(?:BZ\\-VMess\\-TLS|美国\\ Grande\\&RCN\\ [0-9]+(?:\\.[0-9]+){3}\\ ·\\ 主线|美国\\ Grande\\&RCN\\ [0-9]+(?:\\.[0-9]+){3}\\ ·\\ 备用)$'
+# 始终不匹配：通用用户须自行指定稳定节点，不能省略过滤器而匹配全部节点。
+GENERIC_STABLE_PATTERN = "(?!)"
+PERSONAL_SPEED_LIMIT = 10
 PROBE_URL = "https://www.gstatic.com/generate_204"
 PROBE_INTERVAL = 600
 PROBE_TIMEOUT = 5
@@ -178,25 +181,34 @@ RELEASE_URL_BASE = "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@relea
 # --------------------------------------------------------------------------- #
 # 变体
 # --------------------------------------------------------------------------- #
-# 三份配置的差别是「默认出口怎么定」；AI/谷歌在后两份仅可选稳定。
+# 两种受众各有三种路由方式；AI/谷歌在 fallback、hybrid 仅可选稳定。
 
-VARIANTS = [
+MODES = [
     {
-        "id": "Shadowrocket-select",
+        "mode": "select",
         "title": "手动选择出口（PROXY）",
         "default_policy": "PROXY",
         "strict_stable": False,
     },
     {
-        "id": "Shadowrocket-fallback",
+        "mode": "fallback",
         "title": "速度/稳定自动故障转移（fallback）",
         "default_policy": "速度",
         "strict_stable": True,
     },
     {
-        "id": "Shadowrocket-hybrid",
+        "mode": "hybrid",
         "title": "AI/谷歌稳定故障转移，其余手动出口",
         "default_policy": "PROXY",
         "strict_stable": True,
     },
+]
+
+VARIANTS = [
+    {**mode, "audience": audience, "id": f"{prefix}-{mode['mode']}",
+     "title": f"{label} · {mode['title']}"}
+    for audience, prefix, label in (
+        ("generic", "Shadowrocket", "通用版"), ("personal", "leon4z", "个人版")
+    )
+    for mode in MODES
 ]
