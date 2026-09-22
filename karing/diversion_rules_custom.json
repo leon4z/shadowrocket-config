@@ -1,0 +1,297 @@
+{
+  "rules": [
+    {
+      "name": "🎯 国内直连（内置）",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:ChinaIp",
+        "acl:ChinaDomain",
+        "acl:ChinaCompanyIp",
+        "acl:UnBan"
+      ]
+    },
+    {
+      "name": "💬 AI 服务",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/AI.json"
+      ]
+    },
+    {
+      "name": "📹 油管视频",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/YouTube.json"
+      ]
+    },
+    {
+      "name": "🎥 奈飞视频",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Netflix.json"
+      ]
+    },
+    {
+      "name": "🏰 Disney+",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Disney.json"
+      ]
+    },
+    {
+      "name": "🎬 Max (HBO)",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/HBO.json"
+      ]
+    },
+    {
+      "name": "🎵 Spotify",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Spotify.json"
+      ]
+    },
+    {
+      "name": "📲 电报消息",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Telegram.json"
+      ]
+    },
+    {
+      "name": "💳 PayPal",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/PayPal.json"
+      ]
+    },
+    {
+      "name": "📲 X (Twitter)",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Twitter.json"
+      ]
+    },
+    {
+      "name": "📲 Facebook",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Facebook.json"
+      ]
+    },
+    {
+      "name": "📦 Amazon",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Amazon.json"
+      ]
+    },
+    {
+      "name": "游戏平台",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/游戏平台.json"
+      ]
+    },
+    {
+      "name": "🐱 GitHub",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/GitHub.json"
+      ]
+    },
+    {
+      "name": "Ⓜ️ 微软服务",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Microsoft.json"
+      ]
+    },
+    {
+      "name": "🌏 Google",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Google.json"
+      ]
+    },
+    {
+      "name": "🍎 苹果服务",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Apple.json"
+      ]
+    },
+    {
+      "name": "📺 哔哩哔哩",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/BiliBili.json"
+      ]
+    },
+    {
+      "name": "🎶 网易音乐",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/NetEaseMusic.json"
+      ]
+    },
+    {
+      "name": "🔍 百度",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Baidu.json"
+      ]
+    },
+    {
+      "name": "🎬 豆瓣",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/DouBan.json"
+      ]
+    },
+    {
+      "name": "💬 微信",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/WeChat.json"
+      ]
+    },
+    {
+      "name": "📰 新浪",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Sina.json"
+      ]
+    },
+    {
+      "name": "❓ 知乎",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Zhihu.json"
+      ]
+    },
+    {
+      "name": "📕 小红书",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/XiaoHongShu.json"
+      ]
+    },
+    {
+      "name": "🎵 抖音",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/DouYin.json"
+      ]
+    },
+    {
+      "name": "🎧 TikTok",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/TikTok.json"
+      ]
+    },
+    {
+      "name": "🌏 国外穿墙",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Global.json"
+      ]
+    },
+    {
+      "name": "🎯 国内直连",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/China.json"
+      ]
+    },
+    {
+      "name": "🏠 局域网",
+      "outbound": "direct",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Lan.json"
+      ]
+    },
+    {
+      "name": "🌏 国外兜底",
+      "outbound": "urltest",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geosite:geolocation-!cn",
+        "acl:ProxyGFWlist",
+        "acl:ProxyMedia"
+      ]
+    },
+    {
+      "name": "🧪 测试-分组定向",
+      "outbound": "稳定",
+      "switch": false,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:Claude"
+      ]
+    }
+  ]
+}

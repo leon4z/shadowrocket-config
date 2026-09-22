@@ -1,0 +1,73 @@
+{
+ "version": 1,
+ "rules": [
+  {
+   "domain": [
+    "ai.google.dev",
+    "aistudio.google.com",
+    "alkalicore-pa.clients6.google.com",
+    "alkalimakersuite-pa.clients6.google.com",
+    "antigravity-unleash.goog",
+    "antigravity.google",
+    "api-iam.intercom.io",
+    "api.statsig.com",
+    "apple-relay.apple.com",
+    "apple-relay.cloudflare.com",
+    "apple-relay.fastly-edge.com",
+    "bard.google.com",
+    "copilot.microsoft.com",
+    "cp4.cloudflare.com",
+    "gemini.google.com",
+    "gspe1-ssl.ls.apple.com",
+    "guzzoni.apple.com",
+    "o33249.ingest.sentry.io",
+    "openaiapi-site.azureedge.net",
+    "pplx-res.cloudinary.com",
+    "sydney.bing.com",
+    "www.bing.com"
+   ]
+  },
+  {
+   "domain_suffix": [
+    "anthropic.com",
+    "chat.com",
+    "chatgpt.com",
+    "claude.ai",
+    "deepmind.com",
+    "deepmind.google",
+    "geller-pa.googleapis.com",
+    "generativeai.google",
+    "generativelanguage.googleapis.com",
+    "githubcopilot.com",
+    "grok.com",
+    "livekit.cloud",
+    "makersuite.google.com",
+    "oaistatic.com",
+    "oaiusercontent.com",
+    "openai.com",
+    "openrouter.ai",
+    "perplexity.ai",
+    "pplx.ai",
+    "proactivebackend-pa.googleapis.com",
+    "smoot.apple.com",
+    "sora.com",
+    "x.ai"
+   ]
+  },
+  {
+   "domain_keyword": [
+    "labs.google",
+    "notebooklm.google",
+    "openaiapi",
+    "openaicom"
+   ]
+  },
+  {
+   "domain_regex": [
+    "^.*mask.*\\.apple\\-dns\\.net$",
+    "^.*mask.*\\.icloud\\.com$",
+    "^.*siri.*\\.apple\\.com$"
+   ]
+  }
+ ]
+}
