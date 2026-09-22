@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import http.client
 import importlib.util
 import json
 import os
@@ -69,18 +70,30 @@ def load_spec():
 
 def validate_selection(document: dict, spec) -> dict:
     """Reject broad filters, malformed metadata and accidental private fields."""
-    if not isinstance(document, dict) or set(document) != {
+    if not isinstance(document, dict):
+        raise Failure("采样清单必须是对象")
+    expected = {
         "version", "mode", "generated_at", "window_start", "window_end",
         "completed_runs", "selection_id", "groups",
-    }:
+    }
+    if document.get("mode") == "rolling24h":
+        expected |= {"upstream_commit", "upstream_run_id"}
+    if set(document) != expected:
         raise Failure("采样清单顶层字段不符合固定契约")
-    if document["version"] != 1 or document["mode"] != "trial":
+    if document["version"] != 1 or document["mode"] not in {"trial", "rolling24h"}:
         raise Failure("采样清单版本或模式不支持")
     times = [document[k] for k in ("window_start", "window_end", "generated_at")]
     if any(type(v) is not int or v <= 0 for v in times) or times != sorted(times):
         raise Failure("采样清单时间窗口无效")
     if type(document["completed_runs"]) is not int or document["completed_runs"] < 3:
         raise Failure("采样清单完成轮数不足 3")
+    if document["mode"] == "rolling24h":
+        if (not isinstance(document["upstream_commit"], str)
+                or not re.fullmatch(r"[0-9a-f]{40}", document["upstream_commit"])
+                or type(document["upstream_run_id"]) is not int or document["upstream_run_id"] <= 0):
+            raise Failure("每日清单上游版本无效")
+        if document["completed_runs"] < 36 or not 20 * 3600 <= times[1] - times[0] <= 86400:
+            raise Failure("每日清单历史覆盖不足或超出 24 小时窗口")
     if not isinstance(document["selection_id"], str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", document["selection_id"]):
         raise Failure("采样清单 selection_id 无效")
     groups = document["groups"]
@@ -136,6 +149,22 @@ def validate_selection(document: dict, spec) -> dict:
     return document
 
 
+def check_selection_freshness(document: dict, now: int | None = None) -> None:
+    if document["mode"] != "rolling24h":
+        return
+    now = int(time.time()) if now is None else now
+    if (not -300 <= now - document["generated_at"] <= 7200
+            or now - document["window_end"] > 7200):
+        raise Failure("每日采样清单已过期，保留上一发布")
+
+
+def upstream_url(spec, selection: dict | None) -> str:
+    if selection and selection["mode"] == "rolling24h":
+        # Only the validated SHA can vary; the host/repository/path stay trusted.
+        return spec.UPSTREAM_URL.replace("/release/", f"/{selection['upstream_commit']}/", 1)
+    return spec.UPSTREAM_URL
+
+
 def load_selection(spec, path: str = SELECTION_PATH) -> dict:
     try:
         with open(path, encoding="utf-8") as file:
@@ -161,7 +190,7 @@ def fetch(url: str) -> str:
             if not body.strip():
                 raise Failure("内容为空")
             return body
-        except (urllib.error.URLError, urllib.error.HTTPError, Failure, OSError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, Failure, OSError, http.client.IncompleteRead) as exc:
             last = exc
             if attempt < RETRIES:
                 time.sleep(2 * attempt)
@@ -576,11 +605,16 @@ def main() -> int:
                     help="通用版可独立构建，不读取个人采样清单")
     ap.add_argument("--no-network", action="store_true",
                     help="用 dist/upstream-lazy_group.conf 缓存代替联网抓取（离线自检用）")
+    ap.add_argument("--require-fresh-selection", action="store_true",
+                    help="发布前拒绝超过两小时的每日采样清单")
     args = ap.parse_args()
 
     spec = load_spec()
     variants = [v for v in spec.VARIANTS if args.audience in ("all", v["audience"])]
     selection = load_selection(spec) if any(v["audience"] == "personal" for v in variants) else None
+    if args.require_fresh_selection and selection:
+        check_selection_freshness(selection)
+    source_url = upstream_url(spec, selection)
     os.makedirs(args.out_dir, exist_ok=True)
     # 上游内容的缓存固定放 dist/cache/，与 --out-dir 无关：
     # 这样 --no-network 换输出目录也能用，而且不会被当成产物发布出去。
@@ -593,8 +627,8 @@ def main() -> int:
         upstream = open(cache, encoding="utf-8").read()
         print(f"离线模式：用缓存的上游内容（{len(upstream.splitlines())} 行）")
     else:
-        print(f"拉取上游 {spec.UPSTREAM_URL}")
-        upstream = fetch(spec.UPSTREAM_URL)
+        print(f"拉取上游 {source_url}")
+        upstream = fetch(source_url)
         with open(cache, "w", encoding="utf-8") as fh:
             fh.write(upstream)
 
@@ -613,7 +647,7 @@ def main() -> int:
     print(f"上游版本标记 {upstream_rev}，内容 sha256:{upstream_hash}，锚点全部命中")
 
     report: dict = {
-        "upstream_url": spec.UPSTREAM_URL,
+        "upstream_url": source_url,
         "upstream_rev": upstream_rev,
         "upstream_sha256": upstream_hash,
         "variants": [],
@@ -654,13 +688,17 @@ def main() -> int:
             f"# 上游版本标记 {upstream_rev} · 上游内容 sha256:{upstream_hash}",
         ]
         if variant["audience"] == "personal":
+            daily = selection["mode"] == "rolling24h"
             header.extend([
-                f"# 节点筛选：试跑快照 {selection['selection_id']} · 完成 {selection['completed_runs']} 轮",
+                f"# 节点筛选：{'每日滚动快照' if daily else '试跑快照'} {selection['selection_id']} · 完成 {selection['completed_runs']} 轮",
                 "# 采样窗口 " + datetime.fromtimestamp(selection["window_start"], timezone.utc).isoformat()
                 + " 至 " + datetime.fromtimestamp(selection["window_end"], timezone.utc).isoformat(),
                 "# 快照生成 " + datetime.fromtimestamp(selection["generated_at"], timezone.utc).isoformat()
-                + " · 这不是 24 小时或长期稳定性结论；清单未自动更新。",
+                + (" · 按过去 24 小时服务端样本筛选；不代表客户端已同步或长期稳定性。" if daily
+                   else " · 这不是 24 小时或长期稳定性结论；清单未自动更新。"),
             ])
+            if daily:
+                header.append(f"# 本次上游发布 {selection['upstream_commit']} · 任务 {selection['upstream_run_id']}")
         elif variant["strict_stable"]:
             header.append("# 通用版：不使用个人采样。稳定组默认空，使用自动/混合版前须指定稳定节点。")
         else:

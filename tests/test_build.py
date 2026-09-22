@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import tempfile
 import unittest
+import http.client
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +41,34 @@ def sections(variant):
 
 
 class BuildTest(unittest.TestCase):
+    def test_daily_manifest_pins_upstream_and_enforces_freshness(self):
+        manifest = selection()
+        manifest.update(mode='rolling24h', completed_runs=60, window_start=1800000000,
+                        window_end=1800085800, generated_at=1800086400,
+                        upstream_commit='a'*40, upstream_run_id=123)
+        build.validate_selection(manifest, spec)
+        self.assertIn('/'+'a'*40+'/', build.upstream_url(spec, manifest))
+        build.check_selection_freshness(manifest, now=1800086500)
+        for at in (1800094001, 1800085000):
+            with self.assertRaises(build.Failure):
+                build.check_selection_freshness(manifest, now=at)
+        for change in ({'upstream_commit':'../release'}, {'completed_runs':3},
+                       {'window_start':1800085000}):
+            with self.assertRaises(build.Failure):
+                build.validate_selection({**manifest, **change}, spec)
+        self.assertEqual(build.upstream_url(spec, None), spec.UPSTREAM_URL)
+
+    def test_truncated_download_is_retried(self):
+        class Response:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self): return b'complete-body'
+        with patch.object(build.urllib.request, 'urlopen', side_effect=[http.client.IncompleteRead(b'part'), Response()]) as fetch, \
+             patch.object(build.time, 'sleep'):
+            self.assertEqual(build.fetch('https://example.invalid/rules'), 'complete-body')
+            self.assertEqual(fetch.call_count, 2)
+
     def test_six_variants_route_as_requested_and_use_separate_pools(self):
         self.assertEqual([v["id"] for v in spec.VARIANTS], [
             "Shadowrocket-select", "Shadowrocket-fallback", "Shadowrocket-hybrid",

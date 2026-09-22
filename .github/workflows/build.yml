@@ -1,10 +1,8 @@
 name: build
 
-# 每天 UTC 23:00（北京 07:00，与上游 johnshall 的发布时刻一致）校验一次，
-# 源文件改动时也立刻跑。校验失败不会发布，release 分支保持上一版可用。
+# 源数据或生成逻辑变化后校验发布；不与每日名单生成并行抢跑。
+# 校验失败不会发布，release 分支保持上一版可用。
 on:
-  schedule:
-    - cron: '0 23 * * *'
   push:
     branches: [main]
     paths:
@@ -35,7 +33,7 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
       - name: 校验远程规则集并生成配置
-        run: python3 scripts/build.py --report dist/report.json
+        run: python3 scripts/build.py --require-fresh-selection --report dist/report.json
 
       - name: 渲染 Karing 分流分组
         run: python3 scripts/render_karing.py
@@ -49,6 +47,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # A queued older build must never overwrite a newer source revision.
+          current_head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$current_head" != "$GITHUB_SHA" ]; then
+            echo "源分支已有更新，跳过过期构建的发布"
+            exit 0
+          fi
+          python3 -B - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts")
+          import build
+          build.check_selection_freshness(build.load_selection(build.load_spec()))
+          PY
           OUT="$RUNNER_TEMP/publish"
           mkdir -p "$OUT"
           cd "$OUT"
