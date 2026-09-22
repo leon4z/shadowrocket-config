@@ -1,0 +1,35 @@
+# 探针 2 —— 测分组能不能自动吃进 Karing 里已有的节点订阅。
+# 这是整个方案的成败点：如果分组拿不到节点，就必须把节点订阅地址写进配置
+# （那是你的付费凭据，不能进公开仓库）。
+#
+# 期望结果：打开「代理分组」，看 PROBE-include-all-proxies 和 PROBE-include-all
+# 这两个组里有没有出现节点（应该有 🇸🇬 新加坡 / 🇲🇾 马来西亚 那一批）。
+#
+# 两个组用两种写法，请分别告诉我哪个有节点、哪个是空的：
+#   有节点  → 这条路可行，配置里可以完全不含节点信息，公开仓库照旧
+#   都是空  → 这条路不通，得换方案（见 README 讨论）
+
+mixed-port: 7890
+mode: rule
+log-level: info
+proxies: []
+
+proxy-groups:
+  - name: PROBE-include-all-proxies
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 100
+    include-all-proxies: true
+    filter: "🇸🇬|SG|Singapore|新加坡|狮城|🇲🇾|Malaysia"
+
+  - name: PROBE-include-all
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 100
+    include-all: true
+    filter: "🇸🇬|SG|Singapore|新加坡|狮城|🇲🇾|Malaysia"
+
+rules:
+  - MATCH,PROBE-include-all-proxies

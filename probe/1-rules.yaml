@@ -1,0 +1,32 @@
+# 探针 1 —— 只测「远程规则集」和「规则类型」，分组不依赖节点。
+#
+# 期望结果：Karing 能加载并启用这份配置；「分流规则检测 / 测试规则」里输入
+# iphone.com 命中 PROBE，输入 www.apple.com 也命中 PROBE。
+#
+# 若加载失败，说明 rule-providers 或 DOMAIN-WILDCARD 不被支持。
+# 可把 rules 里那行 DOMAIN-WILDCARD 注释掉再试一次，就能区分是哪一个。
+
+mixed-port: 7890
+mode: rule
+log-level: info
+proxies: []
+
+proxy-groups:
+  - name: PROBE
+    type: select
+    proxies:
+      - DIRECT
+
+rule-providers:
+  probe-apple:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    url: "https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/Apple/Apple_Classical_No_Resolve.yaml"
+    path: ./ruleset/probe-apple.yaml
+
+rules:
+  - DOMAIN-WILDCARD,iphone.*,PROBE
+  - RULE-SET,probe-apple,PROBE
+  - MATCH,DIRECT
