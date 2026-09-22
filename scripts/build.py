@@ -215,10 +215,13 @@ def stable_pattern(spec, variant: dict) -> str:
 
 
 def extra_groups(spec, variant: dict, patterns: dict[str, str], upstream: str) -> list[str]:
-    lines = [sampled_group("速度", patterns["速度"], spec),
-             join_params("稳定", ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
-                                      f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}",
-                                      f"url={spec.PROBE_URL}"])]
+    lines = []
+    if variant["default_policy"] == "速度":
+        lines.append(sampled_group("速度", patterns["速度"], spec))
+    if variant["strict_stable"]:
+        lines.append(join_params("稳定", ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
+                                          f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}",
+                                          f"url={spec.PROBE_URL}"]))
     existing = {split_params(line)[0] for line in effective(
         parse_sections(upstream.splitlines()).get("proxy group", []))}
     for name in sorted(set(patterns) - existing - {"速度"}):
@@ -327,8 +330,12 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
             out.append(raw)
             if section == "proxy group":
                 out.append("")
-                out.append("# 个人采样快照筛选。" if variant["audience"] == "personal" else
-                           "# 通用地区匹配；稳定组默认空，请在使用前指定节点并保存本地配置。")
+                if variant["audience"] == "personal":
+                    out.append("# 个人采样快照筛选。")
+                elif variant["strict_stable"]:
+                    out.append("# 通用地区匹配；稳定组默认空，请在使用前指定节点并保存本地配置。")
+                else:
+                    out.append("# 通用地区匹配；地区组按延迟自动选择节点。")
                 out.extend(extra_groups(spec, variant, patterns, upstream))
             continue
         if s and not s.startswith("#"):
@@ -432,7 +439,15 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
     groups = validate_groups(sections)
     definitions = dict(split_params(line) for line in effective(sections.get("proxy group", [])))
     patterns = group_patterns(upstream, spec, variant, selection)
-    expected_groups = set(patterns) | {"稳定"}
+    if variant["default_policy"] != "速度":
+        patterns.pop("速度")
+        if "速度" in groups:
+            raise Failure(f"{variant['id']}: 不应包含速度组")
+    expected_groups = set(patterns)
+    if variant["strict_stable"]:
+        expected_groups.add("稳定")
+    elif "稳定" in groups:
+        raise Failure(f"{variant['id']}: 不应包含稳定组")
     if not expected_groups <= groups:
         raise Failure(f"{variant['id']}: 精选组缺失")
     for name, pattern in patterns.items():
@@ -447,10 +462,11 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
         if (name == "速度" and any(p.startswith("tolerance=") for p in line)) or (
             name != "速度" and f"tolerance={spec.TOLERANCE}" not in line):
             raise Failure(f"{variant['id']}: {name} tolerance 无效")
-    stable = definitions["稳定"]
-    if stable != ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
-                  f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}", f"url={spec.PROBE_URL}"]:
-        raise Failure(f"{variant['id']}: 稳定组定义不符")
+    if variant["strict_stable"]:
+        stable = definitions["稳定"]
+        if stable != ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
+                      f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}", f"url={spec.PROBE_URL}"]:
+            raise Failure(f"{variant['id']}: 稳定组定义不符")
     for anchor in spec.ANCHORS:
         if " = select," not in anchor:
             continue
@@ -645,8 +661,10 @@ def main() -> int:
                 "# 快照生成 " + datetime.fromtimestamp(selection["generated_at"], timezone.utc).isoformat()
                 + " · 这不是 24 小时或长期稳定性结论；清单未自动更新。",
             ])
-        else:
+        elif variant["strict_stable"]:
             header.append("# 通用版：不使用个人采样。稳定组默认空，使用自动/混合版前须指定稳定节点。")
+        else:
+            header.append("# 通用版：不使用个人采样。服务出口默认跟随首页选择，地区组保持自动测速。")
         header.append("# 上游 + 覆盖规格，差异与自定义方法见仓库 README。")
         out_text = "\n".join(header) + "\n" + "\n".join(lines)
         path = os.path.join(args.out_dir, f"{variant['id']}.conf")

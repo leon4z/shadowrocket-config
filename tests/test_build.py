@@ -55,20 +55,29 @@ class BuildTest(unittest.TestCase):
                 self.assertEqual(definitions["Spotify"][1], "DIRECT")
                 self.assertIn("DOMAIN-SUFFIX,cn.example,DIRECT", content["rule"])
                 self.assertIn(f"FINAL,{target}", content["rule"])
-                self.assertEqual(definitions["速度"][0], "fallback")
-                self.assertEqual(definitions["稳定"][0], "fallback")
-                self.assertNotIn("tolerance=100", definitions["速度"])
+                expected_special = {"select": set(), "hybrid": {"稳定"},
+                                    "fallback": {"速度", "稳定"}}[variant["mode"]]
+                self.assertEqual(set(definitions) & {"速度", "稳定"}, expected_special)
+                for name in expected_special:
+                    self.assertEqual(definitions[name][0], "fallback")
+                    self.assertFalse(any(p.startswith("tolerance=") for p in definitions[name]))
+                for name, params in definitions.items():
+                    if name.endswith("节点"):
+                        self.assertEqual(params[0], "url-test")
+                        self.assertIn("tolerance=100", params)
                 if variant["audience"] == "personal":
                     self.assertEqual(definitions["澳大利亚节点"][0], "url-test")
                     self.assertIn("tolerance=100", definitions["澳大利亚节点"])
                     self.assertIn("url=https://www.gstatic.com/generate_204", definitions["澳大利亚节点"])
                     self.assertEqual(definitions["澳大利亚节点"][1],
                                      "policy-regex-filter=(?i)^(?:Sydney\\x2c01)$")
-                    self.assertIn(f"policy-regex-filter={spec.STABLE_PATTERN}", definitions["稳定"])
+                    if "稳定" in definitions:
+                        self.assertIn(f"policy-regex-filter={spec.STABLE_PATTERN}", definitions["稳定"])
                 else:
                     self.assertNotIn("澳大利亚节点", definitions)
                     self.assertIn("policy-regex-filter=US|SG", definitions["美国节点"])
-                    self.assertIn("policy-regex-filter=(?!)", definitions["稳定"])
+                    if "稳定" in definitions:
+                        self.assertIn("policy-regex-filter=(?!)", definitions["稳定"])
                 self.assertFalse(build.effective(content["proxy"]))
                 if variant["audience"] == "personal":
                     self.assertIn(f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf",
@@ -228,12 +237,33 @@ class BuildTest(unittest.TestCase):
 
     def test_empty_stable_cannot_silently_gain_direct_or_proxy_members(self):
         for variant in spec.VARIANTS[:3]:
+            if not variant["strict_stable"]:
+                continue
             for extra in ("DIRECT", "PROXY", "policy-regex-filter=.*"):
                 content = sections(variant)
                 content["proxy group"] = [line + "," + extra if line.startswith("稳定 = ") else line
                                           for line in content["proxy group"]]
                 with self.assertRaises(build.Failure):
                     build.validate_variant(content, spec, variant, None, upstream())
+
+    def test_special_groups_cannot_be_reintroduced_or_removed_from_required_modes(self):
+        for variant in spec.VARIANTS:
+            required = {"select": set(), "hybrid": {"稳定"},
+                        "fallback": {"速度", "稳定"}}[variant["mode"]]
+            source = next(v for v in spec.VARIANTS
+                          if v["audience"] == variant["audience"] and v["mode"] == "fallback")
+            source_lines = dict((build.split_params(line)[0], line)
+                                for line in build.effective(sections(source)["proxy group"]))
+            for name in ("速度", "稳定"):
+                with self.subTest(variant=variant["id"], group=name):
+                    content = sections(variant)
+                    if name in required:
+                        content["proxy group"] = [line for line in content["proxy group"]
+                                                  if not line.startswith(name + " = ")]
+                    else:
+                        content["proxy group"].append(source_lines[name])
+                    with self.assertRaises(build.Failure):
+                        build.validate_variant(content, spec, variant, selection(), upstream())
 
 
 if __name__ == "__main__":
