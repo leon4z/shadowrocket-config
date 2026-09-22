@@ -20,25 +20,53 @@
 
 **自动版和混合版必须先设置「稳定」组。该组默认没有节点，导入后不能直接使用 AI / Google 分流。** 手动版没有这个组。
 
-复制所需配置的完整地址：
+## 导入与更新链接
 
-手动版：
+每种模式提供 GitHub 原始地址（Raw）和 jsDelivr CDN 地址，二者对应同一份配置，选择其中一个即可。CDN 访问异常或仍返回旧内容时，可以尝试 Raw；Raw 也可能受到 GitHub 或客户端缓存影响，不保证即时更新。这里切换的是主配置文件的下载来源，规则集仍按配置内的地址获取。
+
+**手动版**
+
+GitHub 原始地址（Raw）：
+
+```text
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket-select.conf
+```
+
+CDN 地址：
 
 ```text
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-select.conf
 ```
 
-自动版：
+**自动版**
+
+GitHub 原始地址（Raw）：
+
+```text
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket-fallback.conf
+```
+
+CDN 地址：
 
 ```text
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf
 ```
 
-混合版：
+**混合版**
+
+GitHub 原始地址（Raw）：
+
+```text
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/Shadowrocket-hybrid.conf
+```
+
+CDN 地址：
 
 ```text
 https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-hybrid.conf
 ```
+
+已有自定义配置请先阅读下方「保留本地修改」；换用下载地址或重新导入同名文件，也可能覆盖本地修改。
 
 ## 1. 导入配置
 
