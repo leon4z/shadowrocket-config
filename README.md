@@ -155,6 +155,40 @@ https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
 
 本仓库走的是第三条路（上游 + 差异，每日重建），好处是不依赖 `include` 的合并语义（手册没写 `[Proxy Group]` 是按名覆盖还是追加），也不需要在设备上多挂一份配置。
 
+## Karing（Clash / sing-box 系客户端）
+
+同一份源也渲染出一套 Karing 能用的产物，不用在 Karing 里另外手配一遍：
+
+```
+karing/diversion_rules_custom.json          导入用（Karing 的「分流分组」JSON）
+karing/ruleset/<分类>.json                  29 个 sing-box 源码规则集，JSON 里按 URL 引用
+```
+
+地址：`https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/diversion_rules_custom.json`
+
+**导入方式**：Karing 的导入是**本地文件选择器**（`DiversionCustomRules.getFromFile`），不支持 URL，所以先把这个 JSON 下载到本地，再走「分流规则 → 自定义分组 → 右上菜单 → 导入」。导入一次即可——**真正每天变的是它引用的那 29 个规则集，那些是按 URL 自动更新的**；只有分类结构变了才需要重新导入。
+
+### 动作映射
+
+Karing 的规则动作只有四种（`direct` / `block` / `urltest` / `currentSelected`），**不能像小火箭那样给每个服务指定不同分组**。所以映射是：
+
+| 小火箭策略 | Karing 动作 |
+| --- | --- |
+| `DIRECT` | `direct` |
+| `REJECT*` | `block` |
+| `速度`（默认代理组） | `urltest`（Karing 的「自动选择」） |
+| `稳定`（例外代理组） | `currentSelected`（Karing 的「当前选择」） |
+
+**这意味着「AI 走美国、其余走东南亚」在 Karing 里只能做成两档**：AI/谷歌那几条走 `currentSelected`，需要你在首页把 `稳定` 选中；其余走 `urltest`，节点池用「服务器选择关键词」限定成 `速度` 那批。
+
+规则集是从 blackmatrix7 的列表机械转换的（`DOMAIN-SUFFIX`→`domain_suffix`、`DOMAIN-WILDCARD`→`domain_regex`、`IP-CIDR`→`ip_cidr`）。三种类型在 sing-box 规则集里没有对应字段，会被丢弃并在构建输出里点名：`USER-AGENT`（130 条）、`IP-ASN`（7 条）、`URL-REGEX`（1 条）。
+
+兜底用 Karing 的内置集表达：`GEOIP,CN,DIRECT` → `acl:ChinaIp` 等，`FINAL` → `geosite:geolocation-!cn` + `acl:ProxyGFWlist` + `acl:ProxyMedia`。
+
+### 一个待验证的测试规则
+
+JSON 末尾有一条**默认关闭**的 `🧪 测试-分组定向`，它的 `outbound` 直接写分组名 `稳定` 而不是四个常量之一。Karing 的界面代码只对四个常量做显示映射，所以这条是为了验证：**Karing 到底接不接受任意分组名**。如果接受，分组粒度就能做满，上面那个「只能两档」的限制就不存在了。测试办法：导入后把它打开，看它显示成什么、以及分流规则检测里 `claude.ai` 命中它之后走的是哪个出口。
+
 ## 日常怎么改
 
 只改 `src/overrides.py`，然后 commit 到 `main`。工作流会：
@@ -203,13 +237,14 @@ python3 scripts/build.py --out-dir /tmp/x   # 换输出目录
 
 ```
 src/overrides.py               覆盖规格，唯一需要手工维护的东西
-scripts/build.py               拉上游 + 套规格 + 校验 + 生成
+scripts/build.py               拉上游 + 套规格 + 校验 + 生成小火箭配置
+scripts/render_karing.py       把同一份结果渲染成 Karing 的分流分组 + sing-box 规则集
 scripts/summary.py             把构建报告渲染成 Actions 运行摘要
 dist/                          本地构建产物（不提交）
 .github/workflows/build.yml    每日 UTC 23:00 / push 时构建，发布到 release
 ```
 
-`release` 分支只放两份配置，供订阅 URL 使用。
+`release` 分支放两份小火箭配置 + `karing/`（分流分组 JSON 与规则集）。
 
 ## 上游依赖
 

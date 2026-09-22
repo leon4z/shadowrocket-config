@@ -2,3 +2,6 @@ dist/
 __pycache__/
 *.pyc
 .DS_Store
+
+# Karing 导出的本机配置，只作 schema 参考，不进仓库
+diversion_rules_custom.json
