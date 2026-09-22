@@ -296,13 +296,9 @@ def substitute_policy(policy: str, group_name, spec, variant: dict) -> str:
     return variant["default_policy"] if policy == "PROXY" else policy
 
 
-def general_overrides(spec, variant: dict) -> dict[str, str]:
+def general_overrides(spec) -> dict[str, str]:
     overrides = dict(getattr(spec, "GENERAL_OVERRIDES", None) or {})
-    if variant["audience"] == "personal":
-        overrides["update-url"] = f"{spec.RELEASE_URL_BASE}{variant['id']}.conf"
-    else:
-        overrides = {k: v for k, v in overrides.items() if k.lower() != "update-url"}
-    return overrides
+    return {k: v for k, v in overrides.items() if k.lower() != "update-url"}
 
 
 def transform(upstream: str, spec, variant: dict, selection: dict | None) -> list[str]:
@@ -313,7 +309,7 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
     if not countries:
         raise Failure("上游缺少地区分组，无法放置新增地区组")
     new_countries = sorted(set(patterns) - set(upstream_groups) - {"速度"})
-    overrides = general_overrides(spec, variant)
+    overrides = general_overrides(spec)
     applied: set[str] = set()
 
     def pending_general() -> list[str]:
@@ -343,7 +339,7 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
         if s and not s.startswith("#"):
             if section == "general":
                 key = s.split("=", 1)[0].strip()
-                if variant["audience"] == "generic" and key.lower() == "update-url":
+                if key.lower() == "update-url":
                     continue
                 if key in overrides:
                     out.append(f"{key} = {overrides[key]}")
@@ -494,13 +490,10 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
     finals = [line.split(",", 2)[1] for line in effective(sections.get("rule", [])) if line.startswith("FINAL,")]
     if finals != [variant["default_policy"]]:
         raise Failure(f"{variant['id']}: FINAL 出口与变体不符")
-    wanted_url = f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf"
     update_urls = [line for line in effective(sections.get("general", []))
                    if line.split("=", 1)[0].strip().lower() == "update-url"]
-    if variant["audience"] == "generic" and update_urls:
-        raise Failure(f"{variant['id']}: 通用版不得包含 update-url")
-    if variant["audience"] == "personal" and update_urls != [wanted_url]:
-        raise Failure(f"{variant['id']}: update-url 没有指回同名产物")
+    if update_urls:
+        raise Failure(f"{variant['id']}: 发布配置不得包含 update-url")
     return groups
 
 
@@ -638,7 +631,7 @@ def main() -> int:
 
         # 生成后的自检：不该再有圈X 引用、不该有残留的 raw 规则集地址；
         # custom 变体不该再有裸 PROXY 策略；[General] 覆盖要真的生效。
-        for key, val in general_overrides(spec, variant).items():
+        for key, val in general_overrides(spec).items():
             want = f"{key} = {val}"
             if want not in effective(sections.get("general", [])):
                 raise Failure(f"{variant['id']}: [General] 覆盖没生效，期望 {want!r}")

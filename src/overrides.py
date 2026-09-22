@@ -178,7 +178,6 @@ STABLE_ONLY_SERVICES = {"AI", "谷歌服务"}
 REQUIRED_SAMPLED_GROUPS = {
     "速度", "香港节点", "台湾节点", "日本节点", "新加坡节点", "韩国节点", "美国节点",
 }
-RELEASE_URL_BASE = "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/"
 
 # --------------------------------------------------------------------------- #
 # 变体
