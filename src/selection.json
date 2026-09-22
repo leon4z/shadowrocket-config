@@ -1,51 +1,50 @@
 {
-  "version": 1,
-  "mode": "trial",
-  "generated_at": 1790071061,
+  "version": 2,
+  "mode": "rolling24h",
+  "generated_at": 1790098210,
   "window_start": 1790058022,
-  "window_end": 1790070645,
-  "completed_runs": 11,
-  "selection_id": "e6255670a04d",
+  "window_end": 1790097786,
+  "completed_runs": 34,
+  "selection_id": "b0ab84200117",
   "groups": {
     "速度": {
-      "pattern": "(?i)^(?:🇫🇷FR\\ 01|🇫🇷FR\\ 02|🇭🇰HK\\ 01|🇭🇰HK\\ 05\\ 2x流量|🇭🇰HK\\ 05\\ 电信2x|🇮🇳IN\\ 01|🇰🇷KR\\ 01|🇰🇷KR\\ 02|🇲🇾Malaysia\\ 01|🇸🇬SG\\ 04\\ 2x流量|🇸🇬SG\\ 04\\ 电信2x|🇸🇬Singapore\\ 03)$",
-      "node_count": 10
+      "pattern": "(?i)^(?:🇭🇰HK\\ 01|🇭🇰HK\\ 02|🇭🇰HK\\ 04\\ 2x流量)$",
+      "node_count": 3
     },
     "香港节点": {
-      "pattern": "(?i)^(?:🇭🇰HK\\ 01|🇭🇰HK\\ 02|🇭🇰HK\\ 04\\ 2x流量|🇭🇰HK\\ 04\\ 电信2x|🇭🇰HK\\ 05\\ 2x流量|🇭🇰HK\\ 05\\ 电信2x)$",
-      "node_count": 4
+      "pattern": "(?i)^(?:🇭🇰HK\\ 01|🇭🇰HK\\ 02|🇭🇰HK\\ 04\\ 2x流量)$",
+      "node_count": 3
     },
     "台湾节点": {
-      "pattern": "(?i)^(?:🇹🇼TW\\ 01|🇹🇼TW\\ 03\\ 2x流量|🇹🇼TW\\ 03\\ 电信2x)$",
-      "node_count": 2
+      "pattern": "(?i)^(?:🇹🇼TW\\ 01|🇹🇼TW\\ 02|🇹🇼TW\\ 03\\ 2x流量)$",
+      "node_count": 3
     },
     "日本节点": {
-      "pattern": "(?i)^(?:🇯🇵JP\\ 02|🇯🇵JP\\ 03)$",
-      "node_count": 2
+      "pattern": "(?i)^(?:🇯🇵JP\\ 01|🇯🇵JP\\ 02|🇯🇵JP\\ 03)$",
+      "node_count": 3
     },
     "新加坡节点": {
-      "pattern": "(?i)^(?:🇸🇬SG\\ 01|🇸🇬SG\\ 03|🇸🇬SG\\ 04\\ 2x流量|🇸🇬SG\\ 04\\ 电信2x|🇸🇬SG\\ 05\\ 2x流量|🇸🇬SG\\ 05\\ 电信2x|🇸🇬Singapore\\ 03)$",
-      "node_count": 5
+      "pattern": "(?i)^(?:🇸🇬SG\\ 01|🇸🇬SG\\ 04\\ 2x流量|🇸🇬SG\\ 05\\ 2x流量|🇸🇬SG\\ 06\\ 2x流量)$",
+      "node_count": 4
     },
     "美国节点": {
-      "pattern": "(?i)^(?:🇺🇸\\ \\[Hy2\\]US\\ 01)$",
-      "node_count": 1
+      "pattern": "(?i)^(?:🇺🇸\\ \\[Hy2\\]US\\ 01|🇺🇸US\\ 01)$",
+      "node_count": 2
     },
     "英国节点": {
       "pattern": "(?i)^(?:🇬🇧UK\\ 01|🇬🇧UK\\ 02)$",
       "node_count": 2
     },
     "德国节点": {
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 3
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 4
     },
     "韩国节点": {
-      "pattern": "(?i)^(?:🇰🇷KR\\ 01|🇰🇷KR\\ 02)$",
-      "node_count": 2
-    },
-    "马来西亚节点": {
-      "pattern": "(?i)^(?:🇲🇾Malaysia\\ 01)$",
+      "pattern": "(?i)^(?:🇰🇷KR\\ 02)$",
       "node_count": 1
     }
-  }
+  },
+  "upstream_commit": "1df281947ae906e6dd8440bb540eff11312aa74f",
+  "upstream_run_id": 35665786317,
+  "speed_country": "香港"
 }

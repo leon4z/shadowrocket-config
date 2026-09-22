@@ -78,9 +78,13 @@ def validate_selection(document: dict, spec) -> dict:
     }
     if document.get("mode") == "rolling24h":
         expected |= {"upstream_commit", "upstream_run_id"}
+        if document.get("version") == 2:
+            expected.add("speed_country")
     if set(document) != expected:
         raise Failure("采样清单顶层字段不符合固定契约")
-    if document["version"] != 1 or document["mode"] not in {"trial", "rolling24h"}:
+    if (type(document["version"]) is not int or document["version"] not in {1, 2}
+            or document["mode"] not in {"trial", "rolling24h"}
+            or document["version"] == 2 and document["mode"] != "rolling24h"):
         raise Failure("采样清单版本或模式不支持")
     times = [document[k] for k in ("window_start", "window_end", "generated_at")]
     if any(type(v) is not int or v <= 0 for v in times) or times != sorted(times):
@@ -92,13 +96,21 @@ def validate_selection(document: dict, spec) -> dict:
                 or not re.fullmatch(r"[0-9a-f]{40}", document["upstream_commit"])
                 or type(document["upstream_run_id"]) is not int or document["upstream_run_id"] <= 0):
             raise Failure("每日清单上游版本无效")
-        if document["completed_runs"] < 36 or not 20 * 3600 <= times[1] - times[0] <= 86400:
+        min_runs, min_hours = (18, 6) if document["version"] == 2 else (36, 20)
+        if document["completed_runs"] < min_runs or not min_hours * 3600 <= times[1] - times[0] <= 86400:
             raise Failure("每日清单历史覆盖不足或超出 24 小时窗口")
     if not isinstance(document["selection_id"], str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,128}", document["selection_id"]):
         raise Failure("采样清单 selection_id 无效")
     groups = document["groups"]
-    if not isinstance(groups, dict) or not spec.REQUIRED_SAMPLED_GROUPS <= set(groups):
-        raise Failure("采样清单缺少速度或既有国家组")
+    required = spec.PERSONAL_REQUIRED_SAMPLED_GROUPS if document["version"] == 2 else spec.REQUIRED_SAMPLED_GROUPS
+    if not isinstance(groups, dict) or not required <= set(groups):
+        raise Failure("采样清单缺少必需分组")
+    if document["version"] == 2:
+        country = document["speed_country"]
+        if country is not None and (not isinstance(country, str)
+                or not re.fullmatch(r"[\w\u4e00-\u9fff]{1,20}", country)
+                or country + "节点" not in groups):
+            raise Failure("速度组主国家无效或缺少对应国家组")
     if len(groups) > 32:
         raise Failure("采样清单分组数量超限")
     for name, entry in groups.items():
@@ -111,6 +123,8 @@ def validate_selection(document: dict, spec) -> dict:
             raise Failure(f"{name} 的 node_count 无效")
         if name == "速度" and entry["node_count"] > spec.PERSONAL_SPEED_LIMIT:
             raise Failure("个人速度组超过 10 个节点")
+        if name == "速度" and document["version"] == 2 and entry["node_count"] < 3:
+            raise Failure("个人速度组少于 3 个节点")
         if not isinstance(pattern, str) or len(pattern) > 20000 or not pattern.startswith("(?i)^(?:") or not pattern.endswith(")$"):
             raise Failure(f"{name} 必须使用精确锚定正则")
         if any(c in pattern for c in (",", "\n", "\r")):
@@ -146,7 +160,28 @@ def validate_selection(document: dict, spec) -> dict:
             re.compile(pattern)
         except re.error as exc:
             raise Failure(f"{name} 正则无法编译: {exc}") from exc
+    if document["version"] == 2 and document["speed_country"] is not None:
+        country = groups[document["speed_country"] + "节点"]
+        if (country["node_count"] < groups["速度"]["node_count"]
+                or not literal_names(groups["速度"]["pattern"]) <= literal_names(country["pattern"])):
+            raise Failure("速度组成员超出主国家精选范围")
     return document
+
+
+def literal_names(pattern: str) -> set[str]:
+    """Decode only the literal expression grammar already checked above."""
+    inner = pattern[len("(?i)^(?:"):-2]
+    names, current, i = set(), "", 0
+    while i < len(inner):
+        if inner[i:i+4] in {r"\x2c", r"\x23"}:
+            current += chr(int(inner[i+2:i+4], 16)); i += 4
+        elif inner[i] == "\\":
+            current += inner[i+1]; i += 2
+        elif inner[i] == "|":
+            names.add(current); current = ""; i += 1
+        else:
+            current += inner[i]; i += 1
+    return names | {current}
 
 
 def check_selection_freshness(document: dict, now: int | None = None) -> None:
@@ -332,11 +367,15 @@ def general_overrides(spec) -> dict[str, str]:
 
 def transform(upstream: str, spec, variant: dict, selection: dict | None) -> list[str]:
     patterns = group_patterns(upstream, spec, variant, selection)
-    upstream_groups = [split_params(line)[0] for line in effective(
+    upstream_definitions = [split_params(line) for line in effective(
         parse_sections(upstream.splitlines()).get("proxy group", []))]
-    countries = [name for name in upstream_groups if name in patterns and name != "速度"]
-    if not countries:
+    upstream_groups = [name for name, _ in upstream_definitions]
+    upstream_countries = [name for name, params in upstream_definitions
+                          if name.endswith("节点") and params[0] == "url-test"]
+    if not upstream_countries:
         raise Failure("上游缺少地区分组，无法放置新增地区组")
+    omitted = ({name.casefold() for name in upstream_countries if name not in patterns}
+               if variant["audience"] == "personal" and selection["version"] == 2 else set())
     new_countries = sorted(set(patterns) - set(upstream_groups) - {"速度"})
     overrides = general_overrides(spec)
     applied: set[str] = set()
@@ -375,8 +414,16 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                     applied.add(key)
                     continue
             if section == "proxy group":
-                out.append(tune_group(raw, spec, variant, patterns))
-                if split_params(raw)[0] == countries[-1]:
+                name, params = split_params(raw)
+                if name.casefold() not in omitted:
+                    # Remove unavailable country choices only from select menus.
+                    # Direct routing rules or automatic group dependencies remain
+                    # subject to reference validation; never redirect them silently.
+                    if params[0] == "select" and omitted:
+                        params = [p for p in params if p.casefold() not in omitted]
+                        raw = join_params(name, params)
+                    out.append(tune_group(raw, spec, variant, patterns))
+                if name == upstream_countries[-1]:
                     out.extend(sampled_group(name, patterns[name], spec) for name in new_countries)
                 continue
             if section == "rule":
@@ -480,8 +527,10 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
     if not expected_groups <= groups:
         raise Failure(f"{variant['id']}: 精选组缺失")
     country_positions = [i for i, name in enumerate(definitions) if name in patterns and name != "速度"]
-    if country_positions != list(range(country_positions[0], country_positions[0] + len(country_positions))):
+    if country_positions and country_positions != list(range(country_positions[0], country_positions[0] + len(country_positions))):
         raise Failure(f"{variant['id']}: 地区分组必须连续排列")
+    if variant["audience"] == "personal" and {n for n in definitions if n.endswith("节点")} != set(patterns) - {"速度"}:
+        raise Failure(f"{variant['id']}: 地区组与采样清单不一致")
     for name, pattern in patterns.items():
         line = definitions[name]
         want_type = "fallback" if name == "速度" else "url-test"
@@ -656,6 +705,8 @@ def main() -> int:
         "selection": {key: selection[key] for key in (
             "mode", "selection_id", "generated_at", "window_start", "window_end", "completed_runs")} if selection else None,
     }
+    if selection and selection["version"] == 2:
+        report["selection"].update(version=2, speed_country=selection["speed_country"])
 
     built: dict[str, tuple[str, list[tuple[str, str]]]] = {}
 
@@ -699,6 +750,8 @@ def main() -> int:
             ])
             if daily:
                 header.append(f"# 本次上游发布 {selection['upstream_commit']} · 任务 {selection['upstream_run_id']}")
+            if selection["version"] == 2:
+                header.append(f"# 筛选策略 v2 · 速度主国家：{selection['speed_country'] or '跨国精选'} · 同订阅同名历史延续，当前参数另行验证。")
         elif variant["strict_stable"]:
             header.append("# 通用版：不使用个人采样。稳定组默认空，使用自动/混合版前须指定稳定节点。")
         else:

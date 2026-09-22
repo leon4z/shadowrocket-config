@@ -35,6 +35,16 @@ def upstream():
                        "FINAL,PROXY", ""])
 
 
+def daily_v2(countries=("香港节点", "日本节点"), speed_country="香港"):
+    manifest = selection()
+    manifest.update(version=2, mode='rolling24h', window_start=1800000000,
+                    window_end=1800021600, generated_at=1800021700, completed_runs=18,
+                    upstream_commit='a'*40, upstream_run_id=123, speed_country=speed_country)
+    manifest['groups'] = {name: {'pattern':'(?i)^(?:NodeA|NodeB|NodeC)$','node_count':3}
+                          for name in ('速度', *countries)}
+    return manifest
+
+
 def sections(variant):
     manifest = build.validate_selection(selection(), spec)
     return build.parse_sections(build.transform(upstream(), spec, variant, manifest))
@@ -209,13 +219,62 @@ class BuildTest(unittest.TestCase):
         with self.assertRaises(build.Failure):
             build.validate_selection(manifest, spec)
 
-    def test_new_upstream_region_works_generically_but_needs_personal_samples(self):
+    def test_new_upstream_region_is_generic_and_omitted_without_personal_samples(self):
         changed = upstream().replace("[Rule]", "加拿大节点 = url-test,policy-regex-filter=Canada\n[Rule]")
         generic, personal = spec.VARIANTS[0], spec.VARIANTS[3]
         output = build.transform(changed, spec, generic, None)
         self.assertIn("加拿大节点", build.validate_variant(build.parse_sections(output), spec, generic, None, changed))
         with self.assertRaises(build.Failure):
             build.transform(changed, spec, personal, selection())
+        output = build.transform(changed, spec, personal, daily_v2())
+        self.assertNotIn("加拿大节点", build.validate_variant(build.parse_sections(output),spec,personal,daily_v2(),changed))
+
+    def test_v2_minimum_history_and_country_metadata(self):
+        manifest=daily_v2()
+        build.validate_selection(manifest,spec)
+        for change in ({'completed_runs':17},{'window_end':1800021599},{'speed_country':'美国'},
+                       {'speed_country':42},{'version':True},{'mode':'trial'}):
+            with self.subTest(change=change),self.assertRaises(build.Failure):
+                build.validate_selection({**manifest,**change},spec)
+        build.validate_selection(daily_v2((),None),spec)
+        manifest['groups']['速度']['pattern']='(?i)^(?:AnotherNode)$'
+        with self.assertRaisesRegex(build.Failure,'主国家'):
+            build.validate_selection(manifest,spec)
+
+    def test_sparse_personal_countries_remove_only_unavailable_menu_choices(self):
+        fixture=upstream().replace('YouTube = select,PROXY','YouTube = select,PROXY,美国节点,香港节点')
+        manifest=build.validate_selection(daily_v2(),spec)
+        for variant in spec.VARIANTS:
+            with self.subTest(variant=variant['id']):
+                lines=build.transform(fixture,spec,variant,manifest)
+                content=build.parse_sections(lines)
+                groups=build.validate_variant(content,spec,variant,manifest,fixture)
+                build.validate_rules(content,groups)
+                if variant['audience']=='generic':
+                    self.assertEqual(lines,build.transform(fixture,spec,variant,None))
+                    self.assertIn('美国节点',groups)
+                else:
+                    self.assertEqual({g for g in groups if g.endswith('节点')},{'香港节点','日本节点'})
+                    self.assertNotIn('美国节点','\n'.join(lines))
+                    self.assertIn('香港节点 = url-test','\n'.join(lines))
+
+    def test_zero_existing_or_all_country_groups_can_be_omitted(self):
+        for countries,country in [((),None),(('加拿大节点',),'加拿大')]:
+            manifest=build.validate_selection(daily_v2(countries,country),spec)
+            for variant in spec.VARIANTS[3:]:
+                content=build.parse_sections(build.transform(upstream(),spec,variant,manifest))
+                groups=build.validate_variant(content,spec,variant,manifest,upstream())
+                build.validate_rules(content,groups)
+                self.assertEqual({g for g in groups if g.endswith('节点')},set(countries))
+
+    def test_direct_rule_to_omitted_country_still_fails_without_redirect(self):
+        fixture=upstream().replace('FINAL,PROXY','DOMAIN-SUFFIX,example.net,美国节点\nFINAL,PROXY')
+        manifest=daily_v2()
+        variant=spec.VARIANTS[4]
+        content=build.parse_sections(build.transform(fixture,spec,variant,manifest))
+        groups=build.validate_variant(content,spec,variant,manifest,fixture)
+        with self.assertRaises(build.Failure):
+            build.validate_rules(content,groups)
 
     def test_new_countries_follow_existing_countries_in_every_mode(self):
         lines = upstream().splitlines()
