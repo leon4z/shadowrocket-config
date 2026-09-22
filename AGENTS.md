@@ -1,55 +1,27 @@
 # AGENTS.md — shadowrocket-config
 
-小火箭（Shadowrocket）配置仓库 `leon4z/shadowrocket-config` 的本地工作副本。背景、覆盖规格逐项说明、与上游的差异、未验证项、自测办法都在 `README.md`，这里只写协作约束。
+这是公开的 Shadowrocket 配置生成仓库。README 面向配置使用者；生成逻辑、覆盖规格和测试以仓库源码为准。
 
-## 硬约束
+## 公开内容边界
 
-1. **不要往仓库里写节点信息。** 仓库是公开的，`[Proxy]` 段必须保持为空——节点由小火箭 App 内的订阅管理。不要写入服务器地址、端口、密码、UUID、私钥、订阅 URL，也不要把节点名当分组员写死（分组用 `policy-regex-filter`）。
-2. **日常分流修改集中在 `src/overrides.py`，采样筛选输入为 `src/selection.json`。** 清单只能包含已校验的节点名正则和汇总元数据，禁止连接信息；生成器能力变化须同步测试。`dist/` 是构建产物（已 gitignore），`release` 分支由 CI 发布，两者都不要手工改或手工推。Karing 那套产物是 `render_karing.py` 从小火箭配置渲染出来的，**不要单独去改 Karing 的 JSON 或规则集**——要改就改规格，两个客户端一起变。
-3. **不要在 `src/overrides.py` 里存完整配置行。** 覆盖规格必须用「模式匹配」表达（比如「所有指向 PROXY 的地方换成速度」），不能用行号或整行替换——上游随时会增删行，整行替换会静默失配。上游新增服务分组时应该自动被接住，不需要改规格。
-4. **提交前跑一遍** `python3 scripts/build.py`。它会联网校验全部远程规则集、检查锚点、检查策略名解析。本地跑通再 commit。
-5. **不要为了「顺手修好」而扩大改动范围。** 这份配置是在用的东西，路由变化要有据可查。改了什么、为什么、影响哪些域名，写进 commit message 和 README。
-6. **`fallback` 组不要配 `tolerance`。** 手册里 `tolerance` 是「只有当新优胜者的分数高于旧优胜者加公差时才换线」——「优胜者」是 `url-test` 择优的概念。`fallback` 按可用性切换、不做择优比较，配了是无效参数。只有 `url-test` 组该有 tolerance。
+1. README 说明公开能力、模式区别、使用方法、必要限制和上游来源。不要写成个人工作区记录，不加入维护者的订阅背景、节点选择原因、本机路径、内网部署、排障日志或验收流水账。
+2. 不在公开文档中展示个人配置订阅链接或介绍与当前核心功能无关的客户端适配。个人维护记录应留在仓库外。
+3. `[Proxy]` 必须保持为空。禁止提交服务器地址、端口、密码、UUID、私钥或节点订阅凭据。分组使用 `policy-regex-filter`；公开采样清单仅允许经过校验的名称正则和必要汇总元数据。
 
-## 分支
+## 修改与生成
 
-- `main`：规格 + 脚本 + 工作流。日常只推这里。
-- `release`：通用 `Shadowrocket-*` 与个人 `leon4z-*` 各三份配置，以及 Karing 产物。由 Actions 发布，不要直接推。
+1. 分流规格集中在 `src/overrides.py`，定制候选清单为 `src/selection.json`。通用构建不得依赖定制清单。
+2. 规格使用模式匹配表达，不能依赖上游行号或整行替换。上游结构变化应显式校验，避免静默生成错误配置。
+3. `dist/` 是构建产物，`release` 由 CI 发布；不要手工改产物或直接推送 `release`。其他格式的衍生产物也应通过生成器修改。
+4. 保留三种路由模式、既有直连规则以及各配置自己的更新地址。自动与混合模式的 AI / Google 服务只能选择稳定组。
+5. `fallback` 不设置 `tolerance`；该参数只用于 `url-test`。
+6. 修改范围围绕明确需求。生成器能力变化须同步测试；影响实际路由的变更须在提交说明中交代触发条件和行为变化。
 
-## 改动会怎么传导
+## 验证与发布
 
-```
-src/overrides.py  ──┐
-src/selection.json ┤
-                    ├─→ build.py ─→ dist/*.conf ─→ release 分支 ─→ 订阅 URL
-上游 lazy_group.conf ┘
-```
+提交前运行 `python3 scripts/build.py`，联网检查上游锚点、分组引用和远程规则集。代码改动还需运行 `python3 -m unittest discover -s tests -v`。
 
-上游变了、规格没变，产物也会变（这是设计目的）。所以「release 分支有新提交」不一定意味着有人改了规格——看提交信息和 Actions Summary 里的上游版本标记。
-
-通用版不读取采样清单，稳定组保持空；个人速度最多 10 个，地区组包含全部合格节点，稳定组保留原三个。自动模式和混合模式的 AI / 谷歌只能走稳定组。不要用个人名字或名单污染通用候选池。
-
-**一份源 → 两个客户端**：`dist/leon4z-fallback.conf` 是 Karing 渲染器的输入（中间表示），延续原个人版来源。加第三个客户端时照 `render_karing.py` 的样子再写一个渲染器，不要另起一套数据源。
-
-## 权威状态从哪里取
-
-要和小火箭 App 内的实际状态对齐时，注意 **`Documents/Backup/*.conf` 是过期导出**，权威来源是 iCloud Documents 目录下的解析缓存：
-
-```
-~/Library/Mobile Documents/iCloud~com~liguangming~Shadowrocket/Documents/
-  <配置名>.conf--<hash>.db      ← sqlite，config 表 (section,name,value,option) 是生效配置
-  shadowrocket.sync.plist       ← configs 段列出哪些配置是 alive（status: alive/deleted）
-  Modules/                      ← 模块，规则优先级高于配置文件
-```
-
-节点名的权威来源是 Group Container（需要完全磁盘访问权限，ZCode 沙箱会报 `Operation not permitted`）：
-
-```
-~/Library/Group Containers/group.com.liguangming.Shadowrocket/ServerManager   ← NSKeyedArchiver，$objects 里是节点条目
-```
-
-注意：App 自己写节点名时会把 ASCII 部分**转成大写**（`🇸🇬Singapore 01` → `🇸🇬SINGAPORE 01`），`Backup/default-cn-copy.conf` 就是 App 自己生成的，可以对照。所以配置里出现全大写节点名不是笔误。
-
-## 已知未验证项
-
-见 README「已知取舍与未验证项」。核心两条：远程规则集文件内部的 `no-resolve` 是否被逐条 honor、`DOMAIN-SET` 的子域匹配语义——都没有实机验证，只依据上游文档与配置注释。改动这两块相关的东西时不要当成已确认事实。
+- `main` 保存规格、脚本、测试与工作流。
+- `release` 保存 CI 生成的配置及衍生产物，供客户端下载。
+- 当前 CI 一次校验并发布全部变体，任一步失败则保留上一版；通用版可用 `--audience generic` 单独构建。
+- 静态校验与探测成功不能代替 Shadowrocket 真机验证。对远程规则集内部 `no-resolve`、`DOMAIN-SET` 子域匹配和空组行为，不作超出已有证据的保证。
