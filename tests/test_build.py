@@ -202,6 +202,37 @@ class BuildTest(unittest.TestCase):
         with self.assertRaises(build.Failure):
             build.transform(changed, spec, personal, selection())
 
+    def test_new_countries_follow_existing_countries_in_every_mode(self):
+        lines = upstream().splitlines()
+        original_countries = [line for line in lines if line.split(" = ", 1)[0].endswith("节点")]
+        reversed_countries = iter(reversed(original_countries))
+        fixture = "\n".join(next(reversed_countries) if line in original_countries else line for line in lines)
+        fixture = fixture.replace("[Rule]", "尾部服务 = select,PROXY\n[Rule]")
+        expected_existing = [build.split_params(line)[0] for line in reversed(original_countries)]
+        for variant in spec.VARIANTS:
+            with self.subTest(variant=variant["id"]):
+                content = build.parse_sections(build.transform(fixture, spec, variant, selection()))
+                groups = build.validate_variant(content, spec, variant, selection(), fixture)
+                build.validate_rules(content, groups)
+                names = [build.split_params(line)[0] for line in build.effective(content["proxy group"])]
+                expected = expected_existing + (["澳大利亚节点"] if variant["audience"] == "personal" else [])
+                self.assertEqual([name for name in names if name.endswith("节点")], expected)
+                start = names.index(expected[0])
+                self.assertEqual(names[start:start + len(expected)], expected)
+                self.assertLess(names.index("游戏平台"), start)
+                self.assertEqual(names[start + len(expected)], "尾部服务")
+
+    def test_variant_validation_rejects_split_country_groups(self):
+        for variant in spec.VARIANTS:
+            with self.subTest(variant=variant["id"]):
+                content = sections(variant)
+                lines = content["proxy group"]
+                country = next(line for line in lines if line.startswith("美国节点 = "))
+                lines.remove(country)
+                lines.insert(0, country)
+                with self.assertRaisesRegex(build.Failure, "地区分组必须连续排列"):
+                    build.validate_variant(content, spec, variant, selection(), upstream())
+
     def test_proxy_data_and_missing_or_cyclic_group_rejected(self):
         variant = spec.VARIANTS[1]
         manifest = selection()

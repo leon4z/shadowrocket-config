@@ -214,7 +214,7 @@ def stable_pattern(spec, variant: dict) -> str:
     return spec.STABLE_PATTERN if variant["audience"] == "personal" else spec.GENERIC_STABLE_PATTERN
 
 
-def extra_groups(spec, variant: dict, patterns: dict[str, str], upstream: str) -> list[str]:
+def extra_groups(spec, variant: dict, patterns: dict[str, str]) -> list[str]:
     lines = []
     if variant["default_policy"] == "速度":
         lines.append(sampled_group("速度", patterns["速度"], spec))
@@ -222,10 +222,6 @@ def extra_groups(spec, variant: dict, patterns: dict[str, str], upstream: str) -
         lines.append(join_params("稳定", ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
                                           f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}",
                                           f"url={spec.PROBE_URL}"]))
-    existing = {split_params(line)[0] for line in effective(
-        parse_sections(upstream.splitlines()).get("proxy group", []))}
-    for name in sorted(set(patterns) - existing - {"速度"}):
-        lines.append(sampled_group(name, patterns[name], spec))
     return lines
 
 
@@ -311,6 +307,12 @@ def general_overrides(spec, variant: dict) -> dict[str, str]:
 
 def transform(upstream: str, spec, variant: dict, selection: dict | None) -> list[str]:
     patterns = group_patterns(upstream, spec, variant, selection)
+    upstream_groups = [split_params(line)[0] for line in effective(
+        parse_sections(upstream.splitlines()).get("proxy group", []))]
+    countries = [name for name in upstream_groups if name in patterns and name != "速度"]
+    if not countries:
+        raise Failure("上游缺少地区分组，无法放置新增地区组")
+    new_countries = sorted(set(patterns) - set(upstream_groups) - {"速度"})
     overrides = general_overrides(spec, variant)
     applied: set[str] = set()
 
@@ -336,7 +338,7 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                     out.append("# 通用地区匹配；稳定组默认空，请在使用前指定节点并保存本地配置。")
                 else:
                     out.append("# 通用地区匹配；地区组按延迟自动选择节点。")
-                out.extend(extra_groups(spec, variant, patterns, upstream))
+                out.extend(extra_groups(spec, variant, patterns))
             continue
         if s and not s.startswith("#"):
             if section == "general":
@@ -349,6 +351,8 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                     continue
             if section == "proxy group":
                 out.append(tune_group(raw, spec, variant, patterns))
+                if split_params(raw)[0] == countries[-1]:
+                    out.extend(sampled_group(name, patterns[name], spec) for name in new_countries)
                 continue
             if section == "rule":
                 out.extend(expand_rule(raw, spec, variant))
@@ -450,6 +454,9 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
         raise Failure(f"{variant['id']}: 不应包含稳定组")
     if not expected_groups <= groups:
         raise Failure(f"{variant['id']}: 精选组缺失")
+    country_positions = [i for i, name in enumerate(definitions) if name in patterns and name != "速度"]
+    if country_positions != list(range(country_positions[0], country_positions[0] + len(country_positions))):
+        raise Failure(f"{variant['id']}: 地区分组必须连续排列")
     for name, pattern in patterns.items():
         line = definitions[name]
         want_type = "fallback" if name == "速度" else "url-test"
