@@ -72,6 +72,31 @@ def validate_selection(document: dict, spec) -> dict:
     """Reject broad filters, malformed metadata and accidental private fields."""
     if not isinstance(document, dict):
         raise Failure("采样清单必须是对象")
+    if type(document.get('version')) is int and document['version'] == 3:
+        if 'services' not in document or not isinstance(document['services'], dict):
+            raise Failure('v3 缺少服务精选')
+        base = {k: v for k, v in document.items() if k != 'services'}
+        base['version'] = 2
+        validate_selection(base, spec)
+        allowed = {a.split(' = ', 1)[0] for a in spec.ANCHORS if ' = select,' in a} - spec.STABLE_ONLY_SERVICES
+        if not document['services']:
+            raise Failure('v3 至少需要一个具有服务证据的精选组')
+        for service, entry in document['services'].items():
+            if service not in allowed or not isinstance(entry, dict) or set(entry) != {'country', 'pattern', 'node_count', 'probe_level'}:
+                raise Failure('服务精选字段或名称无效')
+            if entry['probe_level'] != 'web_entry' or not isinstance(entry['country'], str):
+                raise Failure('服务精选探测层级或国家无效')
+            country = document['groups'].get(entry['country'] + '节点')
+            if not country or type(entry['node_count']) is not int or not 1 <= entry['node_count'] <= 10:
+                raise Failure('服务精选缺少国家组或节点数量无效')
+            check = dict(base, speed_country=None, groups=dict(base['groups']))
+            check['groups'][entry['country'] + '节点'] = {k: entry[k] for k in ('pattern', 'node_count')}
+            validate_selection(check, spec)
+            names = literal_names(entry['pattern'])
+            if (not names <= literal_names(country['pattern']) or entry['node_count'] > country['node_count']
+                    or entry['node_count'] > len(names)):
+                raise Failure('服务精选成员超出对应国家组')
+        return document
     expected = {
         "version", "mode", "generated_at", "window_start", "window_end",
         "completed_runs", "selection_id", "groups",
@@ -278,6 +303,15 @@ def stable_pattern(spec, variant: dict) -> str:
     return spec.STABLE_PATTERN if variant["audience"] == "personal" else spec.GENERIC_STABLE_PATTERN
 
 
+def service_entries(variant, selection):
+    return selection.get('services', {}) if selection and variant['audience'] == 'personal' and variant['mode'] == 'fallback' else {}
+
+
+def service_group(name, entry, spec):
+    return join_params(name+'精选', ['fallback', 'policy-regex-filter='+entry['pattern'],
+        f'interval={spec.PROBE_INTERVAL}', f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
+
+
 def extra_groups(spec, variant: dict, patterns: dict[str, str]) -> list[str]:
     lines = []
     if variant["default_policy"] == "速度":
@@ -375,7 +409,10 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
     if not upstream_countries:
         raise Failure("上游缺少地区分组，无法放置新增地区组")
     omitted = ({name.casefold() for name in upstream_countries if name not in patterns}
-               if variant["audience"] == "personal" and selection["version"] == 2 else set())
+               if variant["audience"] == "personal" and selection["version"] >= 2 else set())
+    services = service_entries(variant, selection)
+    if any(name+'精选' in upstream_groups for name in services):
+        raise Failure('上游分组与服务精选名称冲突')
     new_countries = sorted(set(patterns) - set(upstream_groups) - {"速度"})
     overrides = general_overrides(spec)
     applied: set[str] = set()
@@ -403,6 +440,7 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                 else:
                     out.append("# 通用地区匹配；地区组按延迟自动选择节点。")
                 out.extend(extra_groups(spec, variant, patterns))
+                out.extend(service_group(name, entry, spec) for name, entry in services.items())
             continue
         if s and not s.startswith("#"):
             if section == "general":
@@ -422,7 +460,11 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                     if params[0] == "select" and omitted:
                         params = [p for p in params if p.casefold() not in omitted]
                         raw = join_params(name, params)
-                    out.append(tune_group(raw, spec, variant, patterns))
+                    tuned = tune_group(raw, spec, variant, patterns)
+                    if name in services:
+                        _, tuned_params = split_params(tuned)
+                        tuned = join_params(name, [name+'精选' if p == variant['default_policy'] else p for p in tuned_params])
+                    out.append(tuned)
                 if name == upstream_countries[-1]:
                     out.extend(sampled_group(name, patterns[name], spec) for name in new_countries)
                 continue
@@ -514,6 +556,12 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
         raise Failure("[Proxy] 含实际节点，公开配置必须为空")
     groups = validate_groups(sections)
     definitions = dict(split_params(line) for line in effective(sections.get("proxy group", [])))
+    services = service_entries(variant, selection)
+    for name, entry in services.items():
+        if definitions.get(name+'精选') != split_params(service_group(name, entry, spec))[1]:
+            raise Failure(f'{name} 服务精选定义不符')
+    if {name for name in definitions if name.endswith('精选')} != {name+'精选' for name in services}:
+        raise Failure('服务精选组范围不符')
     patterns = group_patterns(upstream, spec, variant, selection)
     if variant["default_policy"] != "速度":
         patterns.pop("速度")
@@ -559,6 +607,9 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
         if name in spec.STABLE_ONLY_SERVICES and variant["strict_stable"]:
             if inline != ["稳定"]:
                 raise Failure(f"{variant['id']}: {name} 必须严格仅选稳定")
+        elif name in services:
+            if name+'精选' not in inline or variant['default_policy'] in inline or 'PROXY' in inline:
+                raise Failure(f'{name} 未严格使用服务精选')
         elif variant["default_policy"] not in inline:
             raise Failure(f"{variant['id']}: {name} 默认代理出口错误")
         if ",DIRECT," in anchor and "DIRECT" not in inline:
@@ -705,8 +756,11 @@ def main() -> int:
         "selection": {key: selection[key] for key in (
             "mode", "selection_id", "generated_at", "window_start", "window_end", "completed_runs")} if selection else None,
     }
-    if selection and selection["version"] == 2:
-        report["selection"].update(version=2, speed_country=selection["speed_country"])
+    if selection and selection["version"] >= 2:
+        report["selection"].update(version=selection['version'], speed_country=selection["speed_country"])
+        if selection['version'] == 3:
+            report['selection']['services'] = {name: {'country': entry['country'], 'node_count': entry['node_count']}
+                                               for name, entry in selection['services'].items()}
 
     built: dict[str, tuple[str, list[tuple[str, str]]]] = {}
 
@@ -750,8 +804,10 @@ def main() -> int:
             ])
             if daily:
                 header.append(f"# 本次上游发布 {selection['upstream_commit']} · 任务 {selection['upstream_run_id']}")
-            if selection["version"] == 2:
+            if selection["version"] >= 2:
                 header.append(f"# 筛选策略 v2 · 速度主国家：{selection['speed_country'] or '跨国精选'} · 按节点身份延续历史，当前参数另行验证。")
+            if selection['version'] == 3 and variant['mode'] == 'fallback':
+                header.append('# 服务精选：同国家、服务网页入口探测通过；不代表登录、播放或设备端验收。')
         elif variant["strict_stable"]:
             header.append("# 通用版：不使用个人采样。稳定组默认空，使用自动/混合版前须指定稳定节点。")
         else:
