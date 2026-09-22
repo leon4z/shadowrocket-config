@@ -298,8 +298,12 @@ def substitute_policy(policy: str, group_name, spec, variant: dict) -> str:
 
 
 def general_overrides(spec, variant: dict) -> dict[str, str]:
-    return {**(getattr(spec, "GENERAL_OVERRIDES", None) or {}),
-            "update-url": f"{spec.RELEASE_URL_BASE}{variant['id']}.conf"}
+    overrides = dict(getattr(spec, "GENERAL_OVERRIDES", None) or {})
+    if variant["audience"] == "personal":
+        overrides["update-url"] = f"{spec.RELEASE_URL_BASE}{variant['id']}.conf"
+    else:
+        overrides = {k: v for k, v in overrides.items() if k.lower() != "update-url"}
+    return overrides
 
 
 def transform(upstream: str, spec, variant: dict, selection: dict | None) -> list[str]:
@@ -328,8 +332,10 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                 out.extend(extra_groups(spec, variant, patterns, upstream))
             continue
         if s and not s.startswith("#"):
-            if section == "general" and overrides:
+            if section == "general":
                 key = s.split("=", 1)[0].strip()
+                if variant["audience"] == "generic" and key.lower() == "update-url":
+                    continue
                 if key in overrides:
                     out.append(f"{key} = {overrides[key]}")
                     applied.add(key)
@@ -466,7 +472,11 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
     if finals != [variant["default_policy"]]:
         raise Failure(f"{variant['id']}: FINAL 出口与变体不符")
     wanted_url = f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf"
-    if wanted_url not in effective(sections.get("general", [])):
+    update_urls = [line for line in effective(sections.get("general", []))
+                   if line.split("=", 1)[0].strip().lower() == "update-url"]
+    if variant["audience"] == "generic" and update_urls:
+        raise Failure(f"{variant['id']}: 通用版不得包含 update-url")
+    if variant["audience"] == "personal" and update_urls != [wanted_url]:
         raise Failure(f"{variant['id']}: update-url 没有指回同名产物")
     return groups
 

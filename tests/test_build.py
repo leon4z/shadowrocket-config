@@ -70,14 +70,50 @@ class BuildTest(unittest.TestCase):
                     self.assertIn("policy-regex-filter=US|SG", definitions["美国节点"])
                     self.assertIn("policy-regex-filter=(?!)", definitions["稳定"])
                 self.assertFalse(build.effective(content["proxy"]))
-                self.assertIn(f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf",
-                              build.effective(content["general"]))
+                if variant["audience"] == "personal":
+                    self.assertIn(f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf",
+                                  build.effective(content["general"]))
+                else:
+                    self.assertFalse(any(line.split("=", 1)[0].strip().lower() == "update-url"
+                                         for line in build.effective(content["general"])))
                 if variant["strict_stable"]:
                     self.assertEqual(definitions["AI"], ["select", "稳定"])
                     self.assertEqual(definitions["谷歌服务"], ["select", "稳定"])
                 else:
                     self.assertIn("PROXY", definitions["AI"])
                     self.assertIn("PROXY", definitions["谷歌服务"])
+
+    def test_generic_removes_update_url_from_upstream_and_shared_overrides(self):
+        for key in ("update-url", "UPDATE-URL"):
+            fixture = upstream().replace("[General]", f"[General]\n{key} = https://example.com/old.conf")
+            shared = {**spec.GENERAL_OVERRIDES, key: "https://example.com/shared.conf"}
+            with patch.object(spec, "GENERAL_OVERRIDES", shared):
+                for variant in spec.VARIANTS[:3]:
+                    with self.subTest(key=key, variant=variant["id"]):
+                        result = build.transform(fixture, spec, variant, None)
+                        self.assertEqual(result, build.transform(upstream(), spec, variant, None))
+                        self.assertFalse(any("update-url" in line.lower() for line in result))
+                        build.validate_variant(build.parse_sections(result), spec, variant, None, fixture)
+        fixture = upstream().replace("[General]", "[General]\nupdate-url = https://example.com/old.conf")
+        for variant in spec.VARIANTS[3:]:
+            result = build.parse_sections(build.transform(fixture, spec, variant, selection()))
+            self.assertIn(f"update-url = {spec.RELEASE_URL_BASE}{variant['id']}.conf", result["general"])
+            build.validate_variant(result, spec, variant, selection(), fixture)
+
+    def test_update_url_validation_rejects_wrong_audience_or_target(self):
+        for variant in spec.VARIANTS:
+            content = sections(variant)
+            content["general"] = [line for line in content["general"] if not line.startswith("update-url")]
+            if variant["audience"] == "generic":
+                content["general"].append("UPDATE-URL = https://example.com/unwanted.conf")
+            with self.subTest(variant=variant["id"], change="missing_or_unwanted"):
+                with self.assertRaises(build.Failure):
+                    build.validate_variant(content, spec, variant, selection(), upstream())
+            if variant["audience"] == "personal":
+                content["general"].append("update-url = https://example.com/wrong.conf")
+                with self.subTest(variant=variant["id"], change="wrong_target"):
+                    with self.assertRaises(build.Failure):
+                        build.validate_variant(content, spec, variant, selection(), upstream())
 
     def test_manifest_requires_exact_literal_nonempty_filters(self):
         bad_entries = [
