@@ -1,14 +1,14 @@
 {
   "version": 1,
   "mode": "trial",
-  "generated_at": 1790065972,
+  "generated_at": 1790071061,
   "window_start": 1790058022,
-  "window_end": 1790065885,
-  "completed_runs": 7,
-  "selection_id": "db1370a6c2b0",
+  "window_end": 1790070645,
+  "completed_runs": 11,
+  "selection_id": "e6255670a04d",
   "groups": {
     "速度": {
-      "pattern": "(?i)^(?:🇭🇰HK\\ 04\\ 2x流量|🇭🇰HK\\ 04\\ 电信2x|🇭🇰HK\\ 05\\ 2x流量|🇭🇰HK\\ 05\\ 电信2x|🇰🇷KR\\ 01|🇰🇷KR\\ 02|🇲🇾Malaysia\\ 01|🇸🇬SG\\ 03|🇸🇬SG\\ 04\\ 2x流量|🇸🇬SG\\ 04\\ 电信2x|🇸🇬Singapore\\ 03|🇹🇼TW\\ 01|🇹🇼TW\\ 02)$",
+      "pattern": "(?i)^(?:🇫🇷FR\\ 01|🇫🇷FR\\ 02|🇭🇰HK\\ 01|🇭🇰HK\\ 05\\ 2x流量|🇭🇰HK\\ 05\\ 电信2x|🇮🇳IN\\ 01|🇰🇷KR\\ 01|🇰🇷KR\\ 02|🇲🇾Malaysia\\ 01|🇸🇬SG\\ 04\\ 2x流量|🇸🇬SG\\ 04\\ 电信2x|🇸🇬Singapore\\ 03)$",
       "node_count": 10
     },
     "香港节点": {
@@ -16,8 +16,8 @@
       "node_count": 4
     },
     "台湾节点": {
-      "pattern": "(?i)^(?:🇹🇼TW\\ 01|🇹🇼TW\\ 02|🇹🇼TW\\ 03\\ 2x流量|🇹🇼TW\\ 03\\ 电信2x|🇹🇼TW\\ 04\\ 2x流量|🇹🇼TW\\ 04\\ 电信2x)$",
-      "node_count": 4
+      "pattern": "(?i)^(?:🇹🇼TW\\ 01|🇹🇼TW\\ 03\\ 2x流量|🇹🇼TW\\ 03\\ 电信2x)$",
+      "node_count": 2
     },
     "日本节点": {
       "pattern": "(?i)^(?:🇯🇵JP\\ 02|🇯🇵JP\\ 03)$",
