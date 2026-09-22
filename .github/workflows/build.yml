@@ -33,6 +33,9 @@ jobs:
       - name: 校验远程规则集并生成配置
         run: python3 scripts/build.py --report dist/report.json
 
+      - name: 渲染 Karing 分流分组
+        run: python3 scripts/render_karing.py
+
       - name: 写入运行摘要
         if: always()
         run: python3 scripts/summary.py dist/report.json >> "$GITHUB_STEP_SUMMARY"
@@ -57,9 +60,11 @@ jobs:
             git rm -rq --cached . 2>/dev/null || true
           fi
 
-          # 先清掉上一版的产物，避免改过文件名后旧配置留在 release 分支上
+          # 先清掉上一版的产物，避免改过文件名后旧文件留在 release 分支上
           rm -f ./*.conf
+          rm -rf ./karing
           cp "$GITHUB_WORKSPACE"/dist/*.conf ./
+          cp -R "$GITHUB_WORKSPACE"/dist/karing ./karing
           git add -A
 
           if git diff --cached --quiet; then
@@ -71,16 +76,20 @@ jobs:
           git push -q origin release
           echo "已发布到 release 分支"
           ls -1 ./*.conf
+          echo "karing/ 下 $(ls -1 ./karing/ruleset/*.json | wc -l | tr -d ' ') 个规则集"
 
       - name: 清理 jsDelivr 缓存
         # jsDelivr 对分支引用有缓存，不清的话镜像最长可能滞后十几小时。
         # 清失败不影响发布（raw 地址本来就不经过它）。
         run: |
-          for f in "$GITHUB_WORKSPACE"/dist/*.conf; do
-            n=$(basename "$f")
-            if curl -sf --max-time 30 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@release/${n}" -o /dev/null; then
-              echo "已清理 jsDelivr 缓存: $n"
+          set -uo pipefail
+          ok=0; fail=0
+          for f in "$GITHUB_WORKSPACE"/dist/*.conf "$GITHUB_WORKSPACE"/dist/karing/*.json "$GITHUB_WORKSPACE"/dist/karing/ruleset/*.json; do
+            rel="${f#"$GITHUB_WORKSPACE"/dist/}"
+            if curl -sf --max-time 30 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@release/${rel}" -o /dev/null; then
+              ok=$((ok+1))
             else
-              echo "清理 jsDelivr 缓存失败（不影响发布）: $n"
+              fail=$((fail+1))
             fi
           done
+          echo "已清理 jsDelivr 缓存 $ok 个，失败 $fail 个（失败不影响发布）"

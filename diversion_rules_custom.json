@@ -1,0 +1,174 @@
+{
+  "rules": [
+    {
+      "outbound": "block",
+      "name": "🛑 恶意软件",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geosite:malware",
+        "geoip:malware",
+        "geoip:phishing",
+        "geosite:phishing",
+        "geosite:cryptominers"
+      ]
+    },
+    {
+      "outbound": "block",
+      "name": "🛑 广告拦截",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:BanAD",
+        "geosite:category-ads"
+      ]
+    },
+    {
+      "outbound": "block",
+      "name": "🍃 应用净化",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:BanProgramAD",
+        "acl:BanADCompany"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "💬 OpenAI",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geoip:openai",
+        "geosite:openai"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "💬 Claude",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:Claude"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "♊️ Google Gemini",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:Gemini"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "📹 油管视频",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geosite:youtube"
+      ],
+      "package": [
+        "com.google.android.youtube"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "🌏 Google Play",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geosite:google-play"
+      ],
+      "package": [
+        "com.android.vending"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "🌏 Google",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geosite:google",
+        "geoip:google"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "🐱 GitHub",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geoip:github",
+        "geosite:github"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "📲 电报消息",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geoip:telegram",
+        "geosite:telegram"
+      ],
+      "package": [
+        "org.telegram.messenger.web",
+        "org.telegram.messenger"
+      ]
+    },
+    {
+      "outbound": "direct",
+      "name": "🍎 苹果服务",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geosite:apple",
+        "geosite:apple@ads",
+        "geosite:apple-dev",
+        "geosite:apple-pki",
+        "geosite:apple-update"
+      ]
+    },
+    {
+      "outbound": "direct",
+      "name": "📺 哔哩哔哩",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:BilibiliHMT",
+        "acl:Bilibili"
+      ]
+    },
+    {
+      "outbound": "direct",
+      "name": "🎯 国内直连",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "acl:ChinaIp",
+        "acl:ChinaDomain",
+        "acl:ChinaCompanyIp",
+        "acl:UnBan",
+        "acl:SteamCN",
+        "acl:Download",
+        "acl:ChinaMedia"
+      ]
+    },
+    {
+      "outbound": "urltest",
+      "name": "🌏 国外穿墙",
+      "switch": true,
+      "or": true,
+      "rule_set_build_in": [
+        "geosite:geolocation-!cn",
+        "geosite:google",
+        "geoip:google",
+        "acl:ProxyGFWlist",
+        "acl:ProxyMedia"
+      ]
+    }
+  ]
+}
