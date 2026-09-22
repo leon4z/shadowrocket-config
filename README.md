@@ -6,11 +6,11 @@
 
 ## 选择配置
 
-| 模式 | 普通代理流量 | AI / Google 服务 | 配置链接 |
+| 模式 | 普通代理流量 | AI / Google 服务 | 配置文件 |
 | --- | --- | --- | --- |
-| 手动选择 | 默认跟随首页选择，可按服务另选分组 | 默认跟随首页选择，可另选分组 | [Shadowrocket-select.conf](https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-select.conf) |
-| 自动切换 | 使用「速度」组自动故障切换 | 使用「稳定」组自动故障切换 | [Shadowrocket-fallback.conf](https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf) |
-| 混合分流 | 默认跟随首页选择，可按服务另选分组 | 使用「稳定」组自动故障切换 | [Shadowrocket-hybrid.conf](https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-hybrid.conf) |
+| 手动选择 | 默认跟随首页选择，可按服务另选分组 | 默认跟随首页选择，可另选分组 | `Shadowrocket-select.conf` |
+| 自动切换 | 使用「速度」组自动故障切换 | 使用「稳定」组自动故障切换 | `Shadowrocket-fallback.conf` |
+| 混合分流 | 默认跟随首页选择，可按服务另选分组 | 使用「稳定」组自动故障切换 | `Shadowrocket-hybrid.conf` |
 
 三种模式都保留上游的国内直连规则与服务分类。表中描述的是代理流量；原本默认直连的服务不会因此全部改走代理。
 
@@ -18,12 +18,32 @@
 
 **自动版和混合版必须先设置「稳定」组。该组默认没有节点，导入后不能直接使用 AI / Google 分流。** 手动版保持默认选择时，不需要设置这个组。
 
+复制所需配置的完整地址：
+
+手动版：
+
+```text
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-select.conf
+```
+
+自动版：
+
+```text
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-fallback.conf
+```
+
+混合版：
+
+```text
+https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-hybrid.conf
+```
+
 ## 1. 导入配置
 
 以下使用 Shadowrocket 中文界面的名称，不同版本的图标位置可能略有差异。整个设置过程都可在 App 内完成，无需编辑配置代码。
 
 1. 确认「首页」已有自己的节点。若还没有，可通过首页右上角「+」添加；节点订阅选择类型「Subscribe」，填入自己的订阅 URL 后保存。
-2. 长按上表所需的配置链接，复制链接地址。
+2. 从上方对应的代码块中复制配置的完整地址，也可使用代码块右上角的复制按钮。
 3. 打开底部「配置」页 → 右上角「+」→ 在 URL 栏粘贴链接 → 点「下载」。
 4. 下载完成后，配置文件出现在列表中。先按下面对应模式完成设置，再启用它。
 
