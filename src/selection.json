@@ -1,56 +1,80 @@
 {
   "version": 3,
   "mode": "rolling24h",
-  "generated_at": 1790134664,
-  "window_start": 1790058022,
-  "window_end": 1790134577,
-  "completed_runs": 61,
-  "selection_id": "a129481b4d66",
+  "generated_at": 1790206304,
+  "window_start": 1790120246,
+  "window_end": 1790205964,
+  "completed_runs": 65,
+  "selection_id": "ee0e0d84f295",
   "groups": {
     "速度": {
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02|🇩🇪Germany\\ 01)$",
       "node_count": 3
+    },
+    "香港节点": {
+      "pattern": "(?i)^(?:🇭🇰HK高倍\\ 05\\ 3x流量)$",
+      "node_count": 1
+    },
+    "台湾节点": {
+      "pattern": "(?i)^(?:🇹🇼TW高倍\\ 03\\ 3x流量)$",
+      "node_count": 1
+    },
+    "日本节点": {
+      "pattern": "(?i)^(?:🇯🇵JP\\ 01|🇯🇵JP\\ 02)$",
+      "node_count": 2
     },
     "美国节点": {
       "pattern": "(?i)^(?:🇺🇸\\ \\[Hy2\\]US\\ 01)$",
       "node_count": 1
     },
+    "英国节点": {
+      "pattern": "(?i)^(?:🇬🇧UK\\ 01)$",
+      "node_count": 1
+    },
     "德国节点": {
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02|🇩🇪Germany\\ 01)$",
       "node_count": 3
+    },
+    "韩国节点": {
+      "pattern": "(?i)^(?:🇰🇷KR\\ 02)$",
+      "node_count": 1
+    },
+    "印度节点": {
+      "pattern": "(?i)^(?:🇮🇳IN\\ 01)$",
+      "node_count": 1
     }
   },
-  "upstream_commit": "21ddeef9ac14be1f2878adba5bf6160be4ff85ba",
-  "upstream_run_id": 35795546718,
+  "upstream_commit": "3a488b5c4e08f6017a1389104aa1ca58f060a7ea",
+  "upstream_run_id": 35931626985,
   "speed_country": "德国",
   "services": {
     "YouTube": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02|🇩🇪Germany\\ 01)$",
       "node_count": 3,
       "probe_level": "web_entry"
     },
     "Disney+": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01)$",
-      "node_count": 1,
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02)$",
+      "node_count": 2,
       "probe_level": "web_entry"
     },
     "TikTok": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02|🇩🇪Germany\\ 01)$",
       "node_count": 3,
       "probe_level": "web_entry"
     },
     "Twitter": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02|🇩🇪Germany\\ 01)$",
       "node_count": 3,
       "probe_level": "web_entry"
     },
     "Facebook": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪DE\\ 02|🇩🇪Germany\\ 01)$",
       "node_count": 3,
       "probe_level": "web_entry"
     }
