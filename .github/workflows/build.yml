@@ -42,7 +42,8 @@ jobs:
         if: always()
         run: python3 scripts/summary.py dist/report.json >> "$GITHUB_STEP_SUMMARY"
 
-      - name: 发布到 release 分支
+      - name: 准备 release 提交
+        id: prepare_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -51,6 +52,7 @@ jobs:
           current_head=$(git ls-remote origin refs/heads/main | cut -f1)
           if [ "$current_head" != "$GITHUB_SHA" ]; then
             echo "源分支已有更新，跳过过期构建的发布"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           python3 -B - <<'PY'
@@ -83,12 +85,59 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "配置无变化，跳过发布（上游与规格都没变）"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git commit -q -m "build: $(date -u +%Y-%m-%dT%H:%M:%SZ) 上游 $(date -u +%Y-%m-%d) 校验 ${GITHUB_SHA::7}"
-          git push -q origin release
-          echo "已发布到 release 分支"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: 推送 release 分支
+        if: steps.prepare_release.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/publish"
+          local_sha=$(git rev-parse HEAD)
+          parent_sha=$(git rev-parse refs/remotes/origin/release 2>/dev/null || true)
+          for attempt in 1 2 3; do
+            current_head=$(git ls-remote origin refs/heads/main | cut -f1)
+            if [ "$current_head" != "$GITHUB_SHA" ]; then
+              echo "源分支已有更新，跳过过期构建的发布"
+              exit 0
+            fi
+            if remote_ref=$(git ls-remote origin refs/heads/release); then
+              remote_sha=${remote_ref%%$'\t'*}
+              if [ "$remote_sha" = "$local_sha" ]; then
+                echo "release 已包含本次提交"
+                exit 0
+              fi
+              if [ "$remote_sha" != "$parent_sha" ]; then
+                echo "release 已被其他提交推进，停止发布"
+                exit 1
+              fi
+              if git push -q origin HEAD:refs/heads/release; then
+                echo "已发布到 release 分支"
+                exit 0
+              fi
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((5 * attempt * attempt))
+            fi
+          done
+          # 推送响应丢失时，先确认远端是否实际接收了提交。
+          remote_ref=$(git ls-remote origin refs/heads/release)
+          remote_sha=${remote_ref%%$'\t'*}
+          if [ "$remote_sha" = "$local_sha" ]; then
+            echo "release 已包含本次提交"
+            exit 0
+          fi
+          echo "release 推送失败，保留上一版"
+          exit 1
+
+      - name: 列出 release 产物
+        if: steps.prepare_release.outputs.changed == 'true'
+        run: |
+          cd "$RUNNER_TEMP/publish"
           ls -1 ./*.conf
           echo "karing/ 下 $(ls -1 ./karing/ruleset/*.json | wc -l | tr -d ' ') 个规则集"
 
