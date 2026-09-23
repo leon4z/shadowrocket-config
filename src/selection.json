@@ -1,95 +1,57 @@
 {
   "version": 3,
   "mode": "rolling24h",
-  "generated_at": 1790118714,
+  "generated_at": 1790134664,
   "window_start": 1790058022,
-  "window_end": 1790118462,
-  "completed_runs": 50,
-  "selection_id": "e8948d0f513c",
+  "window_end": 1790134577,
+  "completed_runs": 61,
+  "selection_id": "a129481b4d66",
   "groups": {
     "速度": {
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02|🇭🇰HK高倍\\ 04\\ 3x流量|🇹🇷TR\\ 01|🇺🇸\\ \\[Hy2\\]US\\ 01)$",
-      "node_count": 5
-    },
-    "香港节点": {
-      "pattern": "(?i)^(?:🇭🇰HK高倍\\ 04\\ 3x流量)$",
-      "node_count": 1
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 3
     },
     "美国节点": {
       "pattern": "(?i)^(?:🇺🇸\\ \\[Hy2\\]US\\ 01)$",
       "node_count": 1
     },
     "德国节点": {
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2
-    },
-    "土耳其节点": {
-      "pattern": "(?i)^(?:🇹🇷TR\\ 01)$",
-      "node_count": 1
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 3
     }
   },
   "upstream_commit": "21ddeef9ac14be1f2878adba5bf6160be4ff85ba",
   "upstream_run_id": 35795546718,
-  "speed_country": null,
+  "speed_country": "德国",
   "services": {
     "YouTube": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 3,
       "probe_level": "web_entry"
     },
     "Disney+": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01)$",
+      "node_count": 1,
       "probe_level": "web_entry"
     },
     "TikTok": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 3,
       "probe_level": "web_entry"
     },
     "Twitter": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 3,
       "probe_level": "web_entry"
     },
     "Facebook": {
       "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
-      "probe_level": "web_entry"
-    },
-    "PayPal": {
-      "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
-      "probe_level": "web_entry"
-    },
-    "Amazon": {
-      "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
-      "probe_level": "web_entry"
-    },
-    "苹果服务": {
-      "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
-      "probe_level": "web_entry"
-    },
-    "微软服务": {
-      "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
-      "probe_level": "web_entry"
-    },
-    "哔哩哔哩": {
-      "country": "德国",
-      "pattern": "(?i)^(?:🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 2,
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 3,
       "probe_level": "web_entry"
     }
   }
