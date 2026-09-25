@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""拉上游 lazy_group.conf，生成通用与个人两组三种配置。
+"""拉上游 lazy_group.conf，生成三份通用和四份个人配置。
 
 流程：
   1. 拉上游 johnshall/lazy_group.conf
@@ -280,6 +280,8 @@ def sampled_group(name: str, pattern: str, spec) -> str:
 
 
 def group_patterns(upstream: str, spec, variant: dict, selection: dict | None) -> dict[str, str]:
+    if variant["mode"] == "stable":
+        return {}
     if variant["audience"] == "personal":
         if selection is None:
             raise Failure("个人版缺少采样清单")
@@ -329,6 +331,13 @@ def tune_group(line: str, spec, variant: dict, patterns: dict[str, str]) -> str:
 
     if name in patterns:
         return sampled_group(name, patterns[name], spec)
+    if variant["mode"] == "stable":
+        if params[0] != "select":
+            raise Failure(f"稳定版出现未预期分组 {name}")
+        inline = [p for p in params[1:] if "=" not in p]
+        if "PROXY" not in inline or any(p not in {"DIRECT", "PROXY"} and not p.endswith("节点") for p in inline):
+            raise Failure(f"稳定版服务组 {name} 出现未预期出口")
+        return join_params(name, ["select", *(["DIRECT"] if "DIRECT" in inline else []), "稳定"])
     if variant["audience"] == "personal" and name.endswith("节点"):
         raise Failure(f"上游新增地区组 {name} 尚无个人采样依据")
     if name in spec.STABLE_ONLY_SERVICES and variant["strict_stable"]:
@@ -408,7 +417,9 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                           if name.endswith("节点") and params[0] == "url-test"]
     if not upstream_countries:
         raise Failure("上游缺少地区分组，无法放置新增地区组")
-    omitted = ({name.casefold() for name in upstream_countries if name not in patterns}
+    omitted = ({name.casefold() for name in upstream_countries}
+               if variant["mode"] == "stable" else
+               {name.casefold() for name in upstream_countries if name not in patterns}
                if variant["audience"] == "personal" and selection["version"] >= 2 else set())
     services = service_entries(variant, selection)
     if any(name+'精选' in upstream_groups for name in services):
@@ -564,7 +575,7 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
         raise Failure('服务精选组范围不符')
     patterns = group_patterns(upstream, spec, variant, selection)
     if variant["default_policy"] != "速度":
-        patterns.pop("速度")
+        patterns.pop("速度", None)
         if "速度" in groups:
             raise Failure(f"{variant['id']}: 不应包含速度组")
     expected_groups = set(patterns)
@@ -579,6 +590,18 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
         raise Failure(f"{variant['id']}: 地区分组必须连续排列")
     if variant["audience"] == "personal" and {n for n in definitions if n.endswith("节点")} != set(patterns) - {"速度"}:
         raise Failure(f"{variant['id']}: 地区组与采样清单不一致")
+    if variant["mode"] == "stable":
+        upstream_definitions = dict(split_params(line) for line in effective(
+            parse_sections(upstream.splitlines()).get("proxy group", [])))
+        expected = {"稳定"} | {name for name, params in upstream_definitions.items()
+                             if params[0] == "select" and not name.endswith("节点")}
+        if set(definitions) != expected:
+            raise Failure("稳定版只能包含服务组和稳定组")
+        for name in expected - {"稳定"}:
+            upstream_inline = [p for p in upstream_definitions[name][1:] if "=" not in p]
+            want = ["select", *(["DIRECT"] if "DIRECT" in upstream_inline else []), "稳定"]
+            if definitions[name] != want:
+                raise Failure(f"稳定版服务组 {name} 未严格使用稳定组")
     for name, pattern in patterns.items():
         line = definitions[name]
         want_type = "fallback" if name == "速度" else "url-test"
@@ -792,7 +815,12 @@ def main() -> int:
             f"# 上游 {spec.UPSTREAM_URL}",
             f"# 上游版本标记 {upstream_rev} · 上游内容 sha256:{upstream_hash}",
         ]
-        if variant["audience"] == "personal":
+        if variant["mode"] == "stable":
+            daily = selection["mode"] == "rolling24h"
+            header.append(f"# 发布批次：{'每日滚动快照' if daily else '试跑快照'} {selection['selection_id']} · 稳定组固定，不采用节点筛选名单。")
+            if daily:
+                header.append(f"# 本次上游发布 {selection['upstream_commit']} · 任务 {selection['upstream_run_id']}")
+        elif variant["audience"] == "personal":
             daily = selection["mode"] == "rolling24h"
             header.extend([
                 f"# 节点筛选：{'每日滚动快照' if daily else '试跑快照'} {selection['selection_id']} · 完成 {selection['completed_runs']} 轮",
@@ -831,7 +859,7 @@ def main() -> int:
         print(f"  {variant['id']}.conf  {len(groups)} 组 / {len(refs)} 个远程集合 / "
               f"{len(out_text.splitlines())} 行")
 
-    # 远程集合校验：六个变体共享的集合只抓一遍
+    # 远程集合校验：各变体共享的集合只抓一遍
     all_refs = sorted({r for _, refs in built.values() for r in refs})
     if not args.no_network:
         print(f"\n校验 {len(all_refs)} 个远程集合")

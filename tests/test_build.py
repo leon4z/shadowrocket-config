@@ -79,10 +79,10 @@ class BuildTest(unittest.TestCase):
             self.assertEqual(build.fetch('https://example.invalid/rules'), 'complete-body')
             self.assertEqual(fetch.call_count, 2)
 
-    def test_six_variants_route_as_requested_and_use_separate_pools(self):
+    def test_seven_variants_route_as_requested_and_use_separate_pools(self):
         self.assertEqual([v["id"] for v in spec.VARIANTS], [
             "Shadowrocket-select", "Shadowrocket-fallback", "Shadowrocket-hybrid",
-            "leon4z-select", "leon4z-fallback", "leon4z-hybrid"])
+            "leon4z-select", "leon4z-fallback", "leon4z-hybrid", "leon4z-stable"])
         for variant in spec.VARIANTS:
             with self.subTest(variant=variant["id"]):
                 content = sections(variant)
@@ -95,7 +95,7 @@ class BuildTest(unittest.TestCase):
                 self.assertIn("DOMAIN-SUFFIX,cn.example,DIRECT", content["rule"])
                 self.assertIn(f"FINAL,{target}", content["rule"])
                 expected_special = {"select": set(), "hybrid": {"稳定"},
-                                    "fallback": {"速度", "稳定"}}[variant["mode"]]
+                                    "fallback": {"速度", "稳定"}, "stable": {"稳定"}}[variant["mode"]]
                 self.assertEqual(set(definitions) & {"速度", "稳定"}, expected_special)
                 for name in expected_special:
                     self.assertEqual(definitions[name][0], "fallback")
@@ -104,7 +104,11 @@ class BuildTest(unittest.TestCase):
                     if name.endswith("节点"):
                         self.assertEqual(params[0], "url-test")
                         self.assertIn("tolerance=100", params)
-                if variant["audience"] == "personal":
+                if variant["mode"] == "stable":
+                    self.assertFalse(any(name.endswith("节点") for name in definitions))
+                    self.assertEqual(definitions["YouTube"], ["select", "稳定"])
+                    self.assertEqual(definitions["Spotify"], ["select", "DIRECT", "稳定"])
+                elif variant["audience"] == "personal":
                     self.assertEqual(definitions["澳大利亚节点"][0], "url-test")
                     self.assertIn("tolerance=100", definitions["澳大利亚节点"])
                     self.assertIn("url=https://www.gstatic.com/generate_204", definitions["澳大利亚节点"])
@@ -187,9 +191,12 @@ class BuildTest(unittest.TestCase):
             for name in ("", "US server", "NodeA", "稳定节点", "BZ-VMess-TLS"):
                 self.assertIsNone(re.search(spec.GENERIC_STABLE_PATTERN, name))
             build.validate_variant(build.parse_sections(without), spec, variant, None, upstream())
-        for variant in spec.VARIANTS[3:]:
+        for variant in (v for v in spec.VARIANTS if v['audience'] == 'personal' and v['mode'] != 'stable'):
             with self.assertRaises(build.Failure):
                 build.transform(upstream(), spec, variant, None)
+        stable = next(v for v in spec.VARIANTS if v['mode'] == 'stable')
+        self.assertEqual(build.transform(upstream(), spec, stable, None),
+                         build.transform(upstream(), spec, stable, selection()))
 
     def test_generic_cli_does_not_load_selection_and_writes_only_three_files(self):
         # Complete synthetic anchors, including the four rule-set replacements.
@@ -254,9 +261,14 @@ class BuildTest(unittest.TestCase):
                     self.assertEqual(lines,build.transform(fixture,spec,variant,None))
                     self.assertIn('美国节点',groups)
                 else:
-                    self.assertEqual({g for g in groups if g.endswith('节点')},{'香港节点','日本节点'})
-                    self.assertNotIn('美国节点','\n'.join(lines))
-                    self.assertIn('香港节点 = url-test','\n'.join(lines))
+                    if variant['mode'] == 'stable':
+                        self.assertFalse(any(g.endswith('节点') for g in groups))
+                        self.assertEqual(build.split_params(next(l for l in lines if l.startswith('YouTube = ')))[1],
+                                         ['select', '稳定'])
+                    else:
+                        self.assertEqual({g for g in groups if g.endswith('节点')},{'香港节点','日本节点'})
+                        self.assertNotIn('美国节点','\n'.join(lines))
+                        self.assertIn('香港节点 = url-test','\n'.join(lines))
 
     def test_zero_existing_or_all_country_groups_can_be_omitted(self):
         for countries,country in [((),None),(('加拿大节点',),'加拿大')]:
@@ -265,7 +277,8 @@ class BuildTest(unittest.TestCase):
                 content=build.parse_sections(build.transform(upstream(),spec,variant,manifest))
                 groups=build.validate_variant(content,spec,variant,manifest,upstream())
                 build.validate_rules(content,groups)
-                self.assertEqual({g for g in groups if g.endswith('节点')},set(countries))
+                self.assertEqual({g for g in groups if g.endswith('节点')},
+                                 set() if variant['mode'] == 'stable' else set(countries))
 
     def test_direct_rule_to_omitted_country_still_fails_without_redirect(self):
         fixture=upstream().replace('FINAL,PROXY','DOMAIN-SUFFIX,example.net,美国节点\nFINAL,PROXY')
@@ -289,8 +302,12 @@ class BuildTest(unittest.TestCase):
                 groups = build.validate_variant(content, spec, variant, selection(), fixture)
                 build.validate_rules(content, groups)
                 names = [build.split_params(line)[0] for line in build.effective(content["proxy group"])]
-                expected = expected_existing + (["澳大利亚节点"] if variant["audience"] == "personal" else [])
+                expected = ([] if variant['mode'] == 'stable' else expected_existing +
+                            (["澳大利亚节点"] if variant["audience"] == "personal" else []))
                 self.assertEqual([name for name in names if name.endswith("节点")], expected)
+                if not expected:
+                    self.assertEqual(names[-1], "尾部服务")
+                    continue
                 start = names.index(expected[0])
                 self.assertEqual(names[start:start + len(expected)], expected)
                 self.assertLess(names.index("游戏平台"), start)
@@ -298,6 +315,8 @@ class BuildTest(unittest.TestCase):
 
     def test_variant_validation_rejects_split_country_groups(self):
         for variant in spec.VARIANTS:
+            if variant['mode'] == 'stable':
+                continue
             with self.subTest(variant=variant["id"]):
                 content = sections(variant)
                 lines = content["proxy group"]
@@ -354,7 +373,7 @@ class BuildTest(unittest.TestCase):
     def test_special_groups_cannot_be_reintroduced_or_removed_from_required_modes(self):
         for variant in spec.VARIANTS:
             required = {"select": set(), "hybrid": {"稳定"},
-                        "fallback": {"速度", "稳定"}}[variant["mode"]]
+                        "fallback": {"速度", "稳定"}, "stable": {"稳定"}}[variant["mode"]]
             source = next(v for v in spec.VARIANTS
                           if v["audience"] == variant["audience"] and v["mode"] == "fallback")
             source_lines = dict((build.split_params(line)[0], line)
@@ -369,6 +388,25 @@ class BuildTest(unittest.TestCase):
                         content["proxy group"].append(source_lines[name])
                     with self.assertRaises(build.Failure):
                         build.validate_variant(content, spec, variant, selection(), upstream())
+
+    def test_stable_mode_rejects_other_proxy_exits_and_keeps_direct_rules(self):
+        variant = next(v for v in spec.VARIANTS if v['mode'] == 'stable')
+        result = sections(variant)
+        self.assertEqual({name for name, _ in (build.split_params(line) for line in
+                          build.effective(result['proxy group'])) if name.endswith('节点')}, set())
+        self.assertIn('FINAL,稳定', result['rule'])
+        self.assertIn('DOMAIN-SUFFIX,cn.example,DIRECT', result['rule'])
+        for changed in ('YouTube = select,PROXY', 'YouTube = select,稳定,PROXY',
+                        'YouTube = select,美国节点'):
+            broken = sections(variant)
+            broken['proxy group'] = [changed if line.startswith('YouTube = ') else line
+                                     for line in broken['proxy group']]
+            with self.subTest(changed=changed), self.assertRaises(build.Failure):
+                build.validate_variant(broken, spec, variant, selection(), upstream())
+        broken = sections(variant)
+        broken['proxy group'].append('美国节点 = url-test,PROXY')
+        with self.assertRaises(build.Failure):
+            build.validate_variant(broken, spec, variant, selection(), upstream())
 
 
 if __name__ == "__main__":
