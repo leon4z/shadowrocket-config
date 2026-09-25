@@ -33,7 +33,7 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
       - name: 校验远程规则集并生成配置
-        run: python3 scripts/build.py --report dist/report.json
+        run: python3 scripts/build.py --require-fresh-selection --report dist/report.json
 
       - name: 渲染 Karing 分流分组
         run: python3 scripts/render_karing.py
@@ -55,6 +55,12 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          python3 -B - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts")
+          import build
+          build.check_selection_freshness(build.load_selection(build.load_spec()))
+          PY
           OUT="$RUNNER_TEMP/publish"
           mkdir -p "$OUT"
           cd "$OUT"
@@ -76,34 +82,6 @@ jobs:
           cp "$GITHUB_WORKSPACE"/dist/*.conf ./
           cp -R "$GITHUB_WORKSPACE"/dist/karing ./karing
           git add -A
-
-          # 本次仅新增固定稳定配置：旧清单过期时，只有现有发布文件逐字节
-          # 全部不变、差异恰好是新增 stable 文件，才允许发布。
-          python3 -B - <<'PY'
-          import os
-          from pathlib import Path
-          import subprocess
-          import sys
-          sys.path.insert(0, os.path.join(os.environ['GITHUB_WORKSPACE'], 'scripts'))
-          import build
-
-          selection = build.load_selection(build.load_spec())
-          try:
-              build.check_selection_freshness(selection)
-          except build.Failure:
-              changed = subprocess.check_output(['git', 'diff', '--cached', '--name-status', '-z'])
-              if changed not in (b'A\0leon4z-stable.conf\0', b''):
-                  raise SystemExit('旧采样清单下只允许新增 leon4z-stable.conf')
-              marker = '每日滚动快照 ' + selection['selection_id'] + ' '
-              previous = subprocess.check_output(['git', 'show', 'HEAD:leon4z-fallback.conf']).decode()
-              stable = Path('leon4z-stable.conf').read_text()
-              if marker not in previous or marker not in stable:
-                  raise SystemExit('稳定配置与现有发布批次不一致')
-              if changed == b'' and subprocess.run(
-                      ['git', 'cat-file', '-e', 'HEAD:leon4z-stable.conf'], capture_output=True).returncode != 0:
-                  raise SystemExit('过期清单下没有可发布的稳定配置')
-              print('既有发布文件全部不变，仅新增固定稳定配置；允许本次发布')
-          PY
 
           if git diff --cached --quiet; then
             echo "配置无变化，跳过发布（上游与规格都没变）"
