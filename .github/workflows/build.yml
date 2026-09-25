@@ -33,7 +33,7 @@ jobs:
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
       - name: 校验远程规则集并生成配置
-        run: python3 scripts/build.py --require-fresh-selection --report dist/report.json
+        run: python3 scripts/build.py --report dist/report.json
 
       - name: 渲染 Karing 分流分组
         run: python3 scripts/render_karing.py
@@ -55,12 +55,6 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          python3 -B - <<'PY'
-          import sys
-          sys.path.insert(0, "scripts")
-          import build
-          build.check_selection_freshness(build.load_selection(build.load_spec()))
-          PY
           OUT="$RUNNER_TEMP/publish"
           mkdir -p "$OUT"
           cd "$OUT"
@@ -82,6 +76,40 @@ jobs:
           cp "$GITHUB_WORKSPACE"/dist/*.conf ./
           cp -R "$GITHUB_WORKSPACE"/dist/karing ./karing
           git add -A
+
+          # One release only: allow an old selection when this commit merely
+          # renames the four personal files with identical bytes.
+          GITHUB_WORKSPACE="$GITHUB_WORKSPACE" python3 -B - <<'PY'
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "scripts"))
+          import build
+
+          try:
+              build.check_selection_freshness(build.load_selection(build.load_spec()))
+          except build.Failure:
+              modes = ("select", "fallback", "hybrid", "stable")
+              expected = sorted(
+                  [f"A\t{mode}.conf" for mode in modes]
+                  + [f"D\tleon4z-{mode}.conf" for mode in modes]
+              )
+              actual = sorted(subprocess.check_output(
+                  ["git", "diff", "--cached", "--no-renames", "--name-status"],
+                  text=True,
+              ).splitlines())
+              if actual != expected:
+                  raise SystemExit("采样清单过期，且发布产物并非仅四份个人配置改名")
+              for mode in modes:
+                  old = subprocess.check_output(
+                      ["git", "show", f"HEAD:leon4z-{mode}.conf"]
+                  )
+                  if Path(f"{mode}.conf").read_bytes() != old:
+                      raise SystemExit(f"采样清单过期，且 {mode}.conf 内容有变化")
+              print("采样清单过期；已确认发布差异仅为四份个人配置逐字节改名")
+          PY
 
           if git diff --cached --quiet; then
             echo "配置无变化，跳过发布（上游与规格都没变）"
@@ -150,6 +178,13 @@ jobs:
           for f in "$GITHUB_WORKSPACE"/dist/*.conf "$GITHUB_WORKSPACE"/dist/karing/*.json "$GITHUB_WORKSPACE"/dist/karing/ruleset/*.json; do
             rel="${f#"$GITHUB_WORKSPACE"/dist/}"
             if curl -sf --max-time 30 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@release/${rel}" -o /dev/null; then
+              ok=$((ok+1))
+            else
+              fail=$((fail+1))
+            fi
+          done
+          for mode in select fallback hybrid stable; do
+            if curl -sf --max-time 30 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@release/leon4z-${mode}.conf" -o /dev/null; then
               ok=$((ok+1))
             else
               fail=$((fail+1))

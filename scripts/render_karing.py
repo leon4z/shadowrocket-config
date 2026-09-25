@@ -3,7 +3,7 @@
 
 一份源（上游 lazy_group.conf + src/overrides.py）→ 两个客户端产物：
 
-    leon4z-fallback.conf                            个人小火箭输入
+    fallback.conf                                   个人小火箭输入
     karing/diversion_rules_custom.json
     karing/ruleset/<分类>.json                        Karing
 
@@ -237,7 +237,7 @@ def category_of(url: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="渲染 Karing 的分流分组")
-    ap.add_argument("--conf", default=os.path.join(ROOT, "dist", "leon4z-fallback.conf"),
+    ap.add_argument("--conf", default=os.path.join(ROOT, "dist", "fallback.conf"),
                     help="作为中间表示的小火箭配置")
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "dist", "karing"))
     ap.add_argument("--base-url", default="https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release",

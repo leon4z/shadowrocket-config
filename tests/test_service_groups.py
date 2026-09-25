@@ -39,7 +39,7 @@ class ServiceGroupsTest(unittest.TestCase):
             with self.assertRaises(build.Failure): build.validate_selection(data, spec)
 
     def test_missing_or_bypassed_service_group_fails_output_validation(self):
-        data=manifest(); variant=next(v for v in spec.VARIANTS if v['id']=='leon4z-fallback')
+        data=manifest(); variant=next(v for v in spec.VARIANTS if v['id']=='fallback')
         lines=build.transform(upstream(),spec,variant,data)
         for broken in ([line for line in lines if not line.startswith('TikTok精选 =')],
                        [line.replace('TikTok = select,TikTok精选','TikTok = select,速度') for line in lines],

@@ -209,11 +209,12 @@ MODES = [
 ]
 
 VARIANTS = [
-    {**mode, "audience": audience, "id": f"{prefix}-{mode['mode']}",
+    {**mode, "audience": audience,
+     "id": f"Shadowrocket-{mode['mode']}" if audience == "generic" else mode["mode"],
      "title": f"{label} · {mode['title']}"}
-    for audience, prefix, label in (
-        ("generic", "Shadowrocket", "通用版"), ("personal", "leon4z", "个人版")
+    for audience, label in (
+        ("generic", "通用版"), ("personal", "个人版")
     )
     for mode in MODES
 ] + [{"mode": "stable", "title": "全部代理流量使用稳定组", "default_policy": "稳定",
-      "strict_stable": True, "audience": "personal", "id": "leon4z-stable"}]
+      "strict_stable": True, "audience": "personal", "id": "stable"}]

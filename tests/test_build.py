@@ -82,7 +82,7 @@ class BuildTest(unittest.TestCase):
     def test_seven_variants_route_as_requested_and_use_separate_pools(self):
         self.assertEqual([v["id"] for v in spec.VARIANTS], [
             "Shadowrocket-select", "Shadowrocket-fallback", "Shadowrocket-hybrid",
-            "leon4z-select", "leon4z-fallback", "leon4z-hybrid", "leon4z-stable"])
+            "select", "fallback", "hybrid", "stable"])
         for variant in spec.VARIANTS:
             with self.subTest(variant=variant["id"]):
                 content = sections(variant)
