@@ -209,6 +209,19 @@ def literal_names(pattern: str) -> set[str]:
     return names | {current}
 
 
+def shadowrocket_name_pattern(pattern: str) -> str:
+    """Accept the observed Shadowrocket spelling of mihomo traffic labels."""
+    names = literal_names(pattern)
+    alternatives = {name.replace('流量倍率', '', 1) for name in names
+                    if name.count('流量倍率') == 1} - names
+    alternatives.discard('')
+    if not alternatives:
+        return pattern
+    escaped = [re.escape(name).replace(',', r'\x2c').replace(r'\#', r'\x23')
+               for name in sorted(alternatives)]
+    return pattern[:-2] + '|' + '|'.join(escaped) + ')$'
+
+
 def check_selection_freshness(document: dict, now: int | None = None) -> None:
     if document["mode"] != "rolling24h":
         return
@@ -285,7 +298,8 @@ def group_patterns(upstream: str, spec, variant: dict, selection: dict | None) -
     if variant["audience"] == "personal":
         if selection is None:
             raise Failure("个人版缺少采样清单")
-        return {name: entry["pattern"] for name, entry in selection["groups"].items()}
+        return {name: shadowrocket_name_pattern(entry["pattern"])
+                for name, entry in selection["groups"].items()}
     # 通用版仅取上游的地区匹配；速度池直接匹配这些节点，不嵌套自动组。
     patterns = {}
     for line in effective(parse_sections(upstream.splitlines()).get("proxy group", [])):
@@ -310,7 +324,8 @@ def service_entries(variant, selection):
 
 
 def service_group(name, entry, spec):
-    return join_params(name+'精选', ['fallback', 'policy-regex-filter='+entry['pattern'],
+    return join_params(name+'精选', ['fallback',
+        'policy-regex-filter='+shadowrocket_name_pattern(entry['pattern']),
         f'interval={spec.PROBE_INTERVAL}', f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
 
 

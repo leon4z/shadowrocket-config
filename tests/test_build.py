@@ -51,6 +51,48 @@ def sections(variant):
 
 
 class BuildTest(unittest.TestCase):
+    def test_personal_filters_accept_only_the_two_traffic_label_spellings(self):
+        names = ('日本-TY-4-HY2-流量倍率:0.6', '日本-TY-5-HY2-流量倍率:1')
+        other = '🇺🇸 [Hy2]US 01'
+        source_pattern = '(?i)^(?:' + '|'.join(re.escape(name) for name in (*names, other)) + ')$'
+        manifest = daily_v2(('日本节点', '美国节点'), None)
+        manifest['groups']['速度'] = {'pattern': source_pattern, 'node_count': 3}
+        manifest['groups']['日本节点'] = {'pattern': '(?i)^(?:' + '|'.join(re.escape(name) for name in names) + ')$',
+                                        'node_count': 2}
+        manifest['groups']['美国节点'] = {'pattern': '(?i)^(?:' + re.escape(other) + ')$', 'node_count': 1}
+        manifest['version'] = 3
+        manifest['services'] = {'YouTube': {'country': '日本',
+            'pattern': manifest['groups']['日本节点']['pattern'], 'node_count': 2,
+            'probe_level': 'web_entry'}}
+        build.validate_selection(manifest, spec)
+        variant = next(v for v in spec.VARIANTS if v['id'] == 'fallback')
+        content = build.parse_sections(build.transform(upstream(), spec, variant, manifest))
+        build.validate_variant(content, spec, variant, manifest, upstream())
+        definitions = dict(build.split_params(line) for line in build.effective(content['proxy group']))
+        for group in ('速度', '日本节点', 'YouTube精选'):
+            pattern = next(value.split('=', 1)[1] for value in definitions[group]
+                           if value.startswith('policy-regex-filter='))
+            for name in names:
+                self.assertIsNotNone(re.fullmatch(pattern, name))
+                self.assertIsNotNone(re.fullmatch(pattern, name.replace('流量倍率', '')))
+                self.assertIsNone(re.fullmatch(pattern, name.replace('流量倍率', '流量')))
+        self.assertEqual(manifest['services']['YouTube']['pattern'],
+                         manifest['groups']['日本节点']['pattern'])
+        self.assertEqual(build.shadowrocket_name_pattern('(?i)^(?:NodeA)$'), '(?i)^(?:NodeA)$')
+        for other_variant in spec.VARIANTS:
+            with self.subTest(variant=other_variant['id']):
+                lines = build.transform(upstream(), spec, other_variant, manifest)
+                if other_variant['audience'] == 'generic' or other_variant['mode'] == 'stable':
+                    self.assertEqual(lines, build.transform(upstream(), spec, other_variant, None))
+                    continue
+                rendered = dict(build.split_params(line) for line in build.effective(
+                    build.parse_sections(lines)['proxy group']))
+                self.assertEqual('YouTube精选' in rendered, other_variant['mode'] == 'fallback')
+                country_pattern = next(value.split('=', 1)[1] for value in rendered['日本节点']
+                                       if value.startswith('policy-regex-filter='))
+                self.assertTrue(all(re.fullmatch(country_pattern, name.replace('流量倍率', ''))
+                                    for name in names))
+
     def test_daily_manifest_pins_upstream_and_enforces_freshness(self):
         manifest = selection()
         manifest.update(mode='rolling24h', completed_runs=60, window_start=1800000000,
