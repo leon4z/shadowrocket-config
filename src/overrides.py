@@ -133,20 +133,10 @@ DROP_GROUP_PARAMS = ("policy-select-name",)
 # --------------------------------------------------------------------------- #
 # 2b. 规则集的分发通道
 # --------------------------------------------------------------------------- #
-# 生成时把规则集 URL 从 raw.githubusercontent.com 改写成 jsDelivr。
-#
-# 为什么：小火箭在设备上要拉全部 37 个规则集。全指向 raw.githubusercontent.com
-# 时实测（本机、网络通畅）总耗时 93.8s，其中两个 DOMAIN-SET 直接 30s 超时——
-# raw 对短时间大量请求会限流，国内环境更差。改走 jsDelivr 后同样的 37 个文件
-# 26.6s、0 失败。用户在 iPhone 上更新订阅时遇到的「超时」就是这个问题：
-# 这份配置新引入了 7 个设备上没有缓存的规则集（4 个小火箭版 + 3 个 DOMAIN-SET），
-# 必须现拉，正好打在 raw 最不稳的地方。
-#
-# 改写成通用规则（不是逐个列白名单），所以上游以后引用新的 raw 仓库也能自动接住；
-# 万一某个仓库 jsDelivr 不服务，构建时的远程校验会失败并点名是哪个。
-#
-# 想换回 raw 就把它设成 False。代价是设备端拉取会明显变慢且可能超时。
-USE_JSDELIVR_FOR_RULESETS = True
+# 规则集保留上游 GitHub Raw 地址，避免 jsDelivr 分支缓存延迟。
+# Raw 与客户端仍可能缓存，且批量下载可能超时；构建时逐条联网校验。
+# 如明确选择 CDN 分发，可开启通用 URL 改写。
+USE_JSDELIVR_FOR_RULESETS = False
 
 _RAW_BASE = "https://raw.githubusercontent.com/"
 _JSD_BASE = "https://cdn.jsdelivr.net/gh/"
