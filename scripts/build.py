@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 import hashlib
 import http.client
 import importlib.util
+import ipaddress
 import json
 import os
 import re
@@ -72,6 +73,33 @@ def validate_selection(document: dict, spec) -> dict:
     """Reject broad filters, malformed metadata and accidental private fields."""
     if not isinstance(document, dict):
         raise Failure("采样清单必须是对象")
+    if type(document.get('version')) is int and document['version'] == 4:
+        if not isinstance(document.get('services'), dict) or 'speed_order' not in document:
+            raise Failure('v4 缺少有序速度成员或服务字段')
+        base = {k: v for k, v in document.items() if k != 'speed_order'}
+        base['version'] = 3 if document['services'] else 2
+        if not document['services']:
+            base.pop('services')
+        validate_selection(base, spec)
+        if not document['speed_country']:
+            raise Failure('v4 速度组必须保持单一国家')
+        order = document['speed_order']
+        if (not isinstance(order, list) or len(order) != document['groups']['速度']['node_count']
+                or any(not isinstance(n, str) for n in order)):
+            raise Failure('v4 速度成员数量无效')
+        aliases = literal_names(document['groups']['速度']['pattern'])
+        reserved = BUILTIN_POLICIES | set(document['groups']) | {'稳定'} | {
+            a.split(' = ', 1)[0] for a in spec.ANCHORS} | {n+'精选' for n in document['services']}
+        for name in order:
+            if name not in aliases:
+                raise Failure('v4 有序成员超出速度精选范围')
+            validate_member_name(name, reserved)
+        canonical = [shadowrocket_member_name(n) for n in order]
+        for name in canonical:
+            validate_member_name(name, reserved)
+        if len({n.casefold() for n in canonical}) != len(order):
+            raise Failure('v4 成员名称重复或客户端名称冲突')
+        return document
     if type(document.get('version')) is int and document['version'] == 3:
         if 'services' not in document or not isinstance(document['services'], dict):
             raise Failure('v3 缺少服务精选')
@@ -329,10 +357,42 @@ def service_group(name, entry, spec):
         f'interval={spec.PROBE_INTERVAL}', f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
 
 
-def extra_groups(spec, variant: dict, patterns: dict[str, str]) -> list[str]:
+def validate_member_name(name, reserved):
+    if (not 0 < len(name) <= 120 or name != name.strip() or not name.isprintable()
+            or any(c in name for c in ',=#') or '://' in name
+            or name.casefold() in {n.casefold() for n in reserved}
+            or re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', name)
+            or re.search(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', name)):
+        raise Failure('速度成员名称包含私密地址、保留策略或配置分隔符')
+    for token in name.split():
+        try:
+            ipaddress.ip_address(token.strip('[]'))
+        except ValueError:
+            continue
+        raise Failure('速度成员名称含 IP 地址')
+
+
+def shadowrocket_member_name(name):
+    return name.replace('流量倍率', '', 1) if name.count('流量倍率') == 1 else name
+
+
+def ordered_speed_members(selection, variant):
+    if (selection and selection.get('version') == 4 and variant['audience'] == 'personal'
+            and variant['mode'] == 'fallback'):
+        return [shadowrocket_member_name(n) for n in selection['speed_order']]
+    return []
+
+
+def ordered_speed_group(members, spec):
+    return join_params('速度', ['fallback', *members, f'interval={spec.PROBE_INTERVAL}',
+                              f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
+
+
+def extra_groups(spec, variant: dict, patterns: dict[str, str], selection=None) -> list[str]:
     lines = []
     if variant["default_policy"] == "速度":
-        lines.append(sampled_group("速度", patterns["速度"], spec))
+        members = ordered_speed_members(selection, variant)
+        lines.append(ordered_speed_group(members, spec) if members else sampled_group("速度", patterns["速度"], spec))
     if variant["strict_stable"]:
         lines.append(join_params("稳定", ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
                                           f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}",
@@ -465,7 +525,7 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                     out.append("# 通用地区匹配；稳定组默认空，请在使用前指定节点并保存本地配置。")
                 else:
                     out.append("# 通用地区匹配；地区组按延迟自动选择节点。")
-                out.extend(extra_groups(spec, variant, patterns))
+                out.extend(extra_groups(spec, variant, patterns, selection))
                 out.extend(service_group(name, entry, spec) for name, entry in services.items())
             continue
         if s and not s.startswith("#"):
@@ -525,7 +585,7 @@ def effective(lines: list[str]) -> list[str]:
     return [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
 
 
-def validate_groups(sections: dict[str, list[str]]) -> set[str]:
+def validate_groups(sections: dict[str, list[str]], external_members=None) -> set[str]:
     names: set[str] = set()
     references: dict[str, list[str]] = {}
     for line in effective(sections.get("proxy group", [])):
@@ -551,9 +611,14 @@ def validate_groups(sections: dict[str, list[str]]) -> set[str]:
         elif not inline:
             raise Failure(f"分组 {name} 既没有成员也没有 policy-regex-filter")
     known = {name.upper(): name for name in names}
+    external_members = external_members or {}
+    if any(member.upper() in known or member.upper() in BUILTIN_POLICIES
+           for allowed in external_members.values() for member in allowed):
+        raise Failure('外部节点备注与分组或内置策略冲突')
     for name, members in references.items():
         for member in members:
-            if member.upper() not in known and member.upper() not in BUILTIN_POLICIES:
+            if (member.upper() not in known and member.upper() not in BUILTIN_POLICIES
+                    and member not in external_members.get(name, [])):
                 raise Failure(f"分组 {name} 引用未定义的成员 {member!r}")
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -580,7 +645,10 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
                      selection: dict | None, upstream: str) -> set[str]:
     if effective(sections.get("proxy", [])):
         raise Failure("[Proxy] 含实际节点，公开配置必须为空")
-    groups = validate_groups(sections)
+    ordered = ordered_speed_members(selection, variant)
+    if ordered:
+        validate_selection(selection, spec)
+    groups = validate_groups(sections, {'速度': ordered} if ordered else None)
     definitions = dict(split_params(line) for line in effective(sections.get("proxy group", [])))
     services = service_entries(variant, selection)
     for name, entry in services.items():
@@ -619,6 +687,10 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
                 raise Failure(f"稳定版服务组 {name} 未严格使用稳定组")
     for name, pattern in patterns.items():
         line = definitions[name]
+        if name == '速度' and ordered:
+            if line != split_params(ordered_speed_group(ordered, spec))[1]:
+                raise Failure('有序速度组的成员或探测参数不符')
+            continue
         want_type = "fallback" if name == "速度" else "url-test"
         if line[0] != want_type or f"policy-regex-filter={pattern}" not in line:
             raise Failure(f"{variant['id']}: {name} 未应用对应筛选正则")
@@ -796,7 +868,7 @@ def main() -> int:
     }
     if selection and selection["version"] >= 2:
         report["selection"].update(version=selection['version'], speed_country=selection["speed_country"])
-        if selection['version'] == 3:
+        if selection['version'] >= 3:
             report['selection']['services'] = {name: {'country': entry['country'], 'node_count': entry['node_count']}
                                                for name, entry in selection['services'].items()}
 
@@ -848,9 +920,11 @@ def main() -> int:
             if daily:
                 header.append(f"# 本次上游发布 {selection['upstream_commit']} · 任务 {selection['upstream_run_id']}")
             if selection["version"] >= 2:
-                header.append(f"# 筛选策略 v2 · 速度主国家：{selection['speed_country'] or '跨国精选'} · 按节点身份延续历史，当前参数另行验证。")
-            if selection['version'] == 3 and variant['mode'] == 'fallback':
+                header.append(f"# 筛选策略 v{selection['version']} · 速度主国家：{selection['speed_country'] or '跨国精选'} · 按节点身份延续历史，当前参数另行验证。")
+            if selection['version'] >= 3 and variant['mode'] == 'fallback':
                 header.append('# 服务精选：同国家、服务网页入口探测通过；不代表登录、播放或设备端验收。')
+            if ordered_speed_members(selection, variant):
+                header.append('# 速度组：按同国订阅历史质量排列，按成员顺序 fallback；全部不可用时不含直连兜底。')
         elif variant["strict_stable"]:
             header.append("# 通用版：不使用个人采样。稳定组默认空，使用自动/混合版前须指定稳定节点。")
         else:
