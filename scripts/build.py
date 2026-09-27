@@ -357,13 +357,15 @@ def service_group(name, entry, spec):
         f'interval={spec.PROBE_INTERVAL}', f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
 
 
-def validate_member_name(name, reserved):
+def validate_member_name(name, reserved, *, allow_ip=False):
     if (not 0 < len(name) <= 120 or name != name.strip() or not name.isprintable()
             or any(c in name for c in ',=#') or '://' in name
             or name.casefold() in {n.casefold() for n in reserved}
-            or re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', name)
+            or (not allow_ip and re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', name))
             or re.search(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', name)):
         raise Failure('速度成员名称包含私密地址、保留策略或配置分隔符')
+    if allow_ip:
+        return
     for token in name.split():
         try:
             ipaddress.ip_address(token.strip('[]'))
@@ -385,7 +387,32 @@ def ordered_speed_members(selection, variant):
 
 def ordered_speed_group(members, spec):
     return join_params('速度', ['fallback', *members, f'interval={spec.PROBE_INTERVAL}',
-                              f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
+                               f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
+
+
+def ordered_stable_members(spec, variant):
+    if variant['audience'] != 'personal' or not variant['strict_stable']:
+        return []
+    members = spec.STABLE_MEMBERS
+    if (not isinstance(members, (tuple, list)) or len(members) != 3
+            or any(not isinstance(name, str) for name in members)
+            or len({name.casefold() for name in members}) != 3):
+        raise Failure('个人稳定组必须包含三个唯一的有序节点备注')
+    reserved = BUILTIN_POLICIES | spec.REQUIRED_SAMPLED_GROUPS | {'稳定'} | {
+        anchor.split(' = ', 1)[0] for anchor in spec.ANCHORS}
+    for name in members:
+        # IP 例外仅用于用户明确指定的固定稳定备注；速度清单仍禁止地址。
+        validate_member_name(name, reserved, allow_ip=True)
+        if not re.fullmatch(spec.STABLE_PATTERN, name):
+            raise Failure('稳定成员不符合发布器的固定节点筛选')
+    return list(members)
+
+
+def stable_group(spec, variant):
+    members = ordered_stable_members(spec, variant)
+    params = members or [f'policy-regex-filter={stable_pattern(spec, variant)}']
+    return join_params('稳定', ['fallback', *params, f'interval={spec.PROBE_INTERVAL}',
+                               f'timeout={spec.PROBE_TIMEOUT}', f'url={spec.PROBE_URL}'])
 
 
 def extra_groups(spec, variant: dict, patterns: dict[str, str], selection=None) -> list[str]:
@@ -394,9 +421,7 @@ def extra_groups(spec, variant: dict, patterns: dict[str, str], selection=None) 
         members = ordered_speed_members(selection, variant)
         lines.append(ordered_speed_group(members, spec) if members else sampled_group("速度", patterns["速度"], spec))
     if variant["strict_stable"]:
-        lines.append(join_params("稳定", ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
-                                          f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}",
-                                          f"url={spec.PROBE_URL}"]))
+        lines.append(stable_group(spec, variant))
     return lines
 
 
@@ -648,7 +673,11 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
     ordered = ordered_speed_members(selection, variant)
     if ordered:
         validate_selection(selection, spec)
-    groups = validate_groups(sections, {'速度': ordered} if ordered else None)
+    external = {'速度': ordered} if ordered else {}
+    stable_members = ordered_stable_members(spec, variant)
+    if stable_members:
+        external['稳定'] = stable_members
+    groups = validate_groups(sections, external)
     definitions = dict(split_params(line) for line in effective(sections.get("proxy group", [])))
     services = service_entries(variant, selection)
     for name, entry in services.items():
@@ -703,8 +732,7 @@ def validate_variant(sections: dict[str, list[str]], spec, variant: dict,
             raise Failure(f"{variant['id']}: {name} tolerance 无效")
     if variant["strict_stable"]:
         stable = definitions["稳定"]
-        if stable != ["fallback", f"policy-regex-filter={stable_pattern(spec, variant)}",
-                      f"interval={spec.PROBE_INTERVAL}", f"timeout={spec.PROBE_TIMEOUT}", f"url={spec.PROBE_URL}"]:
+        if stable != split_params(stable_group(spec, variant))[1]:
             raise Failure(f"{variant['id']}: 稳定组定义不符")
     for anchor in spec.ANCHORS:
         if " = select," not in anchor:
@@ -929,6 +957,8 @@ def main() -> int:
             header.append("# 通用版：不使用个人采样。稳定组默认空，使用自动/混合版前须指定稳定节点。")
         else:
             header.append("# 通用版：不使用个人采样。服务出口默认跟随首页选择，地区组保持自动测速。")
+        if variant['audience'] == 'personal' and variant['strict_stable']:
+            header.append('# 稳定组：住宅主线 → 住宅备用 → VPS，完整备注固定顺序，不随每日采样成绩重排。')
         header.append("# 上游 + 覆盖规格，差异与自定义方法见仓库 README。")
         out_text = "\n".join(header) + "\n" + "\n".join(lines)
         path = os.path.join(args.out_dir, f"{variant['id']}.conf")

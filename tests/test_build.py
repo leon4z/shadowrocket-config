@@ -157,7 +157,7 @@ class BuildTest(unittest.TestCase):
                     self.assertEqual(definitions["澳大利亚节点"][1],
                                      "policy-regex-filter=(?i)^(?:Sydney\\x2c01)$")
                     if "稳定" in definitions:
-                        self.assertIn(f"policy-regex-filter={spec.STABLE_PATTERN}", definitions["稳定"])
+                        self.assertEqual(definitions["稳定"][1:4], list(spec.STABLE_MEMBERS))
                 else:
                     self.assertNotIn("澳大利亚节点", definitions)
                     self.assertIn("policy-regex-filter=US|SG", definitions["美国节点"])
