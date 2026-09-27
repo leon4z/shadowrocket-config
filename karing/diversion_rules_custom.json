@@ -1,6 +1,15 @@
 {
   "rules": [
     {
+      "name": "自定义规则 001",
+      "outbound": "currentSelected",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Custom-001.json"
+      ]
+    },
+    {
       "name": "🎯 国内直连（内置）",
       "outbound": "direct",
       "switch": true,
