@@ -174,6 +174,31 @@ python3 scripts/build.py --audience generic --out-dir dist/generic
 
 构建会获取上游配置、应用 `src/overrides.py` 的覆盖规格，并检查分组引用、分流规则和远程规则集。生成文件位于 `dist/generic/`。
 
+### 自定义分流规则
+
+在 `src/custom-rules.json` 集中维护域名覆盖规则。构建时按清单顺序写入主配置 `[Rule]` 开头，优先于上游分类规则集；无需另外导入模块或下载自定义规则 URL。当前包含 Dia 的 `diabrowser.engineering` 后端域名，使用 AI 分组；浏览器打开的其他网页仍按各自域名匹配。规则命中不代表服务的地区限制已解除。
+
+每条记录须提供 `rule` 和单行用途 `note`。支持 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`DOMAIN-WILDCARD`，出口可选 `AI`、`稳定`、`速度`、`PROXY`、`DIRECT`。自定义规则的 `PROXY` 始终保留“跟随首页当前选择”的含义，不随生成模式改写。
+
+```json
+[
+  {
+    "rule": "DOMAIN-SUFFIX,diabrowser.engineering,AI",
+    "note": "Dia 账号及后端服务沿用 AI 分流。"
+  },
+  {
+    "rule": "DOMAIN,fast.example.com,速度",
+    "note": "仅在个人自动版使用速度组的示例。",
+    "modes": ["fallback"],
+    "audiences": ["personal"]
+  }
+]
+```
+
+省略 `modes` / `audiences` 表示适用于全部模式 / 通用及个人版。`modes` 可选 `select`、`fallback`、`hybrid`、`stable`，`audiences` 可选 `generic`、`personal`。速度组只存在于 fallback，稳定组只存在于 fallback/hybrid/stable；stable 模式不接受手动 PROXY 出口。引用不适用的组、无效语法或适用范围重叠的重复匹配条件会使构建失败，不会自动更换出口。更具体的例外应放在宽泛规则前面；清单顺序会原样保留。Karing 衍生配置也保留覆盖顺序，但稳定/手动出口对应其“当前选择”，不代表支持 Shadowrocket 的独立策略组。
+
+修改清单后运行测试和完整构建，再通过正常 CI 发布。规则会随主配置更新，外部规则集仍由客户端独立拉取；回退清单并重新发布即可撤销自定义变更。
+
 </details>
 
 ## 上游项目

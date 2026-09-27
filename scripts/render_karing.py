@@ -51,6 +51,7 @@ OUTBOUND_MAP = {
     "REJECT-NO-DROP": "block",
     "速度": "urltest",
     "稳定": "currentSelected",
+    "PROXY": "currentSelected",
 }
 DEFAULT_OUTBOUND = "urltest"
 
@@ -209,16 +210,39 @@ def parse_rule_lines(conf_text: str) -> list[tuple[str, str, str]]:
     section = None
     out: list[tuple[str, str, str]] = []
     last_category = None
+    custom = False
+    custom_count = 0
+    ai_policy = None
+    for raw in conf_text.splitlines():
+        if raw.strip().startswith('AI = '):
+            params = [p.strip() for p in raw.split('=', 1)[1].split(',')]
+            if len(params) >= 2 and params[0] == 'select':
+                ai_policy = params[1]
     for raw in conf_text.split("\n"):
         s = raw.strip()
         if s.startswith("[") and s.endswith("]"):
             section = s[1:-1].strip().lower()
             continue
+        if section == 'rule' and s == '# 自定义规则开始（src/custom-rules.json）':
+            custom = True
+            continue
+        if section == 'rule' and s == '# 自定义规则结束':
+            custom = False
+            last_category = None
+            continue
         if section != "rule" or not s or s.startswith("#"):
             continue
         parts = [p.strip() for p in s.split(",")]
         rtype = parts[0].upper()
-        if rtype in ("RULE-SET", "DOMAIN-SET") and len(parts) >= 3:
+        if custom:
+            if len(parts) != 3 or rtype not in {'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-WILDCARD'}:
+                raise Failure('自定义规则无法转换为 Karing 域名规则')
+            policy = ai_policy if parts[2] == 'AI' else parts[2]
+            if policy not in OUTBOUND_MAP:
+                raise Failure('自定义规则的出口无法转换为 Karing 动作')
+            custom_count += 1
+            out.append((f'Custom-{custom_count:03d}', ','.join(parts[:2]), policy))
+        elif rtype in ("RULE-SET", "DOMAIN-SET") and len(parts) >= 3:
             category = MERGE_INTO.get(category_of(parts[1]), category_of(parts[1]))
             last_category = category
             out.append((category, parts[1], parts[2]))
@@ -245,7 +269,8 @@ def main() -> int:
     ap.add_argument("--no-network", action="store_true", help="只解析配置，不下载规则集")
     args = ap.parse_args()
 
-    conf = open(args.conf, encoding="utf-8").read()
+    with open(args.conf, encoding="utf-8") as fh:
+        conf = fh.read()
     entries = parse_rule_lines(conf)
     if not entries:
         raise SystemExit(f"{args.conf} 里没解析到 RULE-SET/DOMAIN-SET")
@@ -253,8 +278,10 @@ def main() -> int:
     # 按分类聚合：分类 → {策略, 源 URL 列表, 通配列表}
     cats: dict[str, dict] = {}
     for category, value, policy in entries:
-        c = cats.setdefault(category, {"policy": policy, "urls": [], "wildcards": []})
-        if value.startswith("http"):
+        c = cats.setdefault(category, {"policy": policy, "urls": [], "wildcards": [], "inline": []})
+        if category.startswith('Custom-'):
+            c['inline'].append(value)
+        elif value.startswith("http"):
             c["urls"].append(value)
         else:
             c["wildcards"].append(value)
@@ -283,6 +310,8 @@ def main() -> int:
                     dropped[k] = dropped.get(k, 0) + v
         for pattern in c["wildcards"]:
             buckets.setdefault("domain_regex", set()).add(wildcard_to_regex(pattern))
+        if c['inline']:
+            convert_list('\n'.join(c['inline']), buckets)
 
         ruleset = to_ruleset(buckets)
         rel = f"ruleset/{name}.json"
@@ -292,7 +321,7 @@ def main() -> int:
 
         n = sum(len(v) for r in ruleset["rules"] for v in r.values())
         rules.append({
-            "name": DISPLAY_NAME.get(name, name),
+            "name": ('自定义规则 ' + name.split('-')[1]) if name.startswith('Custom-') else DISPLAY_NAME.get(name, name),
             "outbound": OUTBOUND_MAP.get(c["policy"], DEFAULT_OUTBOUND),
             "switch": True,
             "or": True,
@@ -303,7 +332,8 @@ def main() -> int:
         print(f"  生成 {rel}  {n} 条")
 
     # 兜底：小火箭的 GEOIP,CN,DIRECT 和 FINAL 用 Karing 内置集表达
-    rules.insert(0, {
+    # Explicit overrides precede the built-in China classification too.
+    rules.insert(sum(name.startswith('Custom-') for name in cats), {
         "name": "🎯 国内直连（内置）", "outbound": "direct", "switch": True, "or": True,
         "rule_set_build_in": ["acl:ChinaIp", "acl:ChinaDomain", "acl:ChinaCompanyIp", "acl:UnBan"],
     })

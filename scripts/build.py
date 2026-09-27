@@ -32,6 +32,11 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC_PATH = os.path.join(ROOT, "src", "overrides.py")
 SELECTION_PATH = os.path.join(ROOT, "src", "selection.json")
+CUSTOM_RULES_PATH = os.path.join(ROOT, "src", "custom-rules.json")
+CUSTOM_RULES_START = "# 自定义规则开始（src/custom-rules.json）"
+CUSTOM_RULES_END = "# 自定义规则结束"
+CUSTOM_RULE_TYPES = {"DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD"}
+CUSTOM_POLICIES = {"AI", "稳定", "速度", "PROXY", "DIRECT"}
 
 # 小火箭规则行白名单。前 16 个来自主二进制里那条校验正则；
 # IP6-CIDR / PROTOCOL / AND / NOT / OR 是同一套解析器的其它 token。
@@ -67,6 +72,80 @@ def load_spec():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def validate_custom_rules(document, spec) -> list[dict]:
+    """Validate inline domain overrides and their explicit variant scopes."""
+    if not isinstance(document, list):
+        raise Failure("自定义规则必须是数组")
+    result = []
+    seen = set()
+    for index, entry in enumerate(document, 1):
+        label = f"自定义规则第 {index} 条"
+        if (not isinstance(entry, dict) or not {'rule', 'note'} <= set(entry)
+                or set(entry) - {'rule', 'note', 'modes', 'audiences'}):
+            raise Failure(f"{label}: 字段无效，须提供 rule 和 note")
+        rule, note = entry['rule'], entry['note']
+        if (not isinstance(rule, str) or not rule.isprintable()
+                or not isinstance(note, str) or not note.strip() or not note.isprintable()):
+            raise Failure(f"{label}: 规则和用途须为非空单行文本")
+        parts = [p.strip() for p in rule.split(',')]
+        if len(parts) != 3 or parts[0].upper() not in CUSTOM_RULE_TYPES or parts[2] not in CUSTOM_POLICIES:
+            raise Failure(f"{label}: 仅支持域名规则及 AI/稳定/速度/PROXY/DIRECT 出口")
+        rtype, value, policy = parts[0].upper(), parts[1].lower(), parts[2]
+        if not value or len(value) > 253 or not re.fullmatch(r'[a-z0-9_.?*\-]+', value):
+            raise Failure(f"{label}: 域名匹配值无效")
+        if rtype in {'DOMAIN', 'DOMAIN-SUFFIX'} and any(
+                not re.fullmatch(r'[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?', part)
+                for part in value.split('.')):
+            raise Failure(f"{label}: 须使用完整域名，不能包含通配符")
+        normalized = dict(entry, rule=','.join((rtype, value, policy)), note=note.strip())
+        for field, allowed in [('modes', {v['mode'] for v in spec.VARIANTS}),
+                               ('audiences', {v['audience'] for v in spec.VARIANTS})]:
+            scope = entry.get(field, sorted(allowed))
+            if (not isinstance(scope, list) or not scope or any(not isinstance(v, str) for v in scope)
+                    or len(set(scope)) != len(scope) or not set(scope) <= allowed):
+                raise Failure(f"{label}: {field} 范围无效")
+            normalized[field] = scope
+        variants = [v for v in spec.VARIANTS if custom_rule_applies(normalized, v)]
+        if not variants:
+            raise Failure(f"{label}: 没有适用的配置")
+        for variant in variants:
+            if policy == '稳定' and not variant['strict_stable']:
+                raise Failure(f"{label}: {variant['id']} 没有稳定组，请限定 modes")
+            if policy == '速度' and variant['default_policy'] != '速度':
+                raise Failure(f"{label}: {variant['id']} 没有速度组，请限定 modes")
+            if policy == 'PROXY' and variant['mode'] == 'stable':
+                raise Failure(f"{label}: stable 模式只允许稳定代理出口，请限定 modes")
+            key = (variant['id'], rtype, value)
+            if key in seen:
+                raise Failure(f"{label}: {variant['id']} 的同一匹配条件重复或出口冲突")
+            seen.add(key)
+        result.append(normalized)
+    return result
+
+
+def custom_rule_applies(entry: dict, variant: dict) -> bool:
+    return variant['mode'] in entry['modes'] and variant['audience'] in entry['audiences']
+
+
+def load_custom_rules(spec) -> list[dict]:
+    try:
+        with open(CUSTOM_RULES_PATH, encoding='utf-8') as fh:
+            document = json.load(fh)
+    except (OSError, ValueError):
+        raise Failure("无法读取自定义规则文件 src/custom-rules.json") from None
+    return validate_custom_rules(document, spec)
+
+
+def render_custom_rules(rules: list[dict], variant: dict) -> list[str]:
+    active = [entry for entry in rules if custom_rule_applies(entry, variant)]
+    if not active:
+        return []
+    lines = [CUSTOM_RULES_START]
+    for entry in active:
+        lines.extend(['# ' + entry['note'], entry['rule']])
+    return [*lines, CUSTOM_RULES_END, '']
 
 
 def validate_selection(document: dict, spec) -> dict:
@@ -508,7 +587,8 @@ def general_overrides(spec) -> dict[str, str]:
     return {k: v for k, v in overrides.items() if k.lower() != "update-url"}
 
 
-def transform(upstream: str, spec, variant: dict, selection: dict | None) -> list[str]:
+def transform(upstream: str, spec, variant: dict, selection: dict | None,
+              custom_rules: list[dict] | None = None) -> list[str]:
     patterns = group_patterns(upstream, spec, variant, selection)
     upstream_definitions = [split_params(line) for line in effective(
         parse_sections(upstream.splitlines()).get("proxy group", []))]
@@ -542,6 +622,9 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None) -> lis
                 applied.update(overrides)
             section = s[1:-1].strip().lower()
             out.append(raw)
+            if section == 'rule':
+                # These explicit policies must not undergo upstream PROXY substitution.
+                out.extend(render_custom_rules(custom_rules or [], variant))
             if section == "proxy group":
                 out.append("")
                 if variant["audience"] == "personal":
@@ -848,6 +931,7 @@ def main() -> int:
     args = ap.parse_args()
 
     spec = load_spec()
+    custom_rules = load_custom_rules(spec)
     variants = [v for v in spec.VARIANTS if args.audience in ("all", v["audience"])]
     selection = load_selection(spec) if any(v["audience"] == "personal" for v in variants) else None
     if args.require_fresh_selection and selection:
@@ -903,7 +987,7 @@ def main() -> int:
     built: dict[str, tuple[str, list[tuple[str, str]]]] = {}
 
     for variant in variants:
-        lines = transform(upstream, spec, variant, selection)
+        lines = transform(upstream, spec, variant, selection, custom_rules)
         sections = parse_sections(lines)
 
         # 生成后的自检：不该再有圈X 引用、不该有残留的 raw 规则集地址；

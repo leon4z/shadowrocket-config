@@ -1,0 +1,6 @@
+[
+  {
+    "rule": "DOMAIN-SUFFIX,diabrowser.engineering,AI",
+    "note": "Dia 账号及后端服务沿用 AI 分流；普通网页仍按各自域名匹配。"
+  }
+]
