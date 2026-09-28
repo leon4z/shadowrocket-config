@@ -2,5 +2,25 @@
   {
     "rule": "DOMAIN-SUFFIX,diabrowser.engineering,AI",
     "note": "Dia 账号及后端服务沿用 AI 分流；普通网页仍按各自域名匹配。"
+  },
+  {
+    "rule": "DOMAIN-SUFFIX,cursor.com,AI",
+    "note": "Cursor 网站及账号服务沿用 AI 分流。"
+  },
+  {
+    "rule": "DOMAIN-SUFFIX,cursor.sh,AI",
+    "note": "Cursor 客户端 API 沿用 AI 分流。"
+  },
+  {
+    "rule": "DOMAIN-SUFFIX,cursorapi.com,AI",
+    "note": "Cursor API 域名沿用 AI 分流。"
+  },
+  {
+    "rule": "DOMAIN-SUFFIX,cursor-cdn.com,AI",
+    "note": "Cursor 资源域名沿用 AI 分流。"
+  },
+  {
+    "rule": "DOMAIN-SUFFIX,cursorvm.com,AI",
+    "note": "Cursor 远程工作区域名沿用 AI 分流，避免落入默认速度出口。"
   }
 ]

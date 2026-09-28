@@ -19,8 +19,16 @@ def entry(rule, **scope):
 
 
 class CustomRulesTest(unittest.TestCase):
-    def test_dia_precedes_external_rules_in_every_variant_and_other_rules_are_preserved(self):
+    def test_custom_domains_precede_external_rules_in_every_variant_and_other_rules_are_preserved(self):
         rules = build.load_custom_rules(spec)
+        expected = [
+            'DOMAIN-SUFFIX,diabrowser.engineering,AI',
+            'DOMAIN-SUFFIX,cursor.com,AI',
+            'DOMAIN-SUFFIX,cursor.sh,AI',
+            'DOMAIN-SUFFIX,cursorapi.com,AI',
+            'DOMAIN-SUFFIX,cursor-cdn.com,AI',
+            'DOMAIN-SUFFIX,cursorvm.com,AI',
+        ]
         fixture = upstream().replace('FINAL,PROXY',
             'RULE-SET,https://example.com/Global.list,PROXY\nFINAL,PROXY')
         for variant in spec.VARIANTS:
@@ -32,7 +40,7 @@ class CustomRulesTest(unittest.TestCase):
                 groups = build.validate_variant(content, spec, variant, manifest, fixture)
                 build.validate_rules(content, groups)
                 active = build.effective(content['rule'])
-                self.assertEqual(active[0], 'DOMAIN-SUFFIX,diabrowser.engineering,AI')
+                self.assertEqual(active[:len(expected)], expected)
                 start, end = lines.index(build.CUSTOM_RULES_START), lines.index(build.CUSTOM_RULES_END)
                 self.assertEqual(lines[:start] + lines[end + 2:], baseline)
                 self.assertEqual(lines, build.transform(fixture, spec, variant, manifest, rules))
