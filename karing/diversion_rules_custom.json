@@ -10,6 +10,51 @@
       ]
     },
     {
+      "name": "自定义规则 002",
+      "outbound": "currentSelected",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Custom-002.json"
+      ]
+    },
+    {
+      "name": "自定义规则 003",
+      "outbound": "currentSelected",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Custom-003.json"
+      ]
+    },
+    {
+      "name": "自定义规则 004",
+      "outbound": "currentSelected",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Custom-004.json"
+      ]
+    },
+    {
+      "name": "自定义规则 005",
+      "outbound": "currentSelected",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Custom-005.json"
+      ]
+    },
+    {
+      "name": "自定义规则 006",
+      "outbound": "currentSelected",
+      "switch": true,
+      "or": true,
+      "rule_set": [
+        "https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/karing/ruleset/Custom-006.json"
+      ]
+    },
+    {
       "name": "🎯 国内直连（内置）",
       "outbound": "direct",
       "switch": true,
