@@ -170,9 +170,10 @@ https://cdn.jsdelivr.net/gh/leon4z/shadowrocket-config@release/Shadowrocket-hybr
 ```sh
 python3 -m unittest discover -s tests -v
 python3 scripts/build.py --audience generic --out-dir dist/generic
+python3 scripts/render_mihomo.py
 ```
 
-构建会获取上游配置、应用 `src/overrides.py` 的覆盖规格，并检查分组引用、分流规则和远程规则集。生成文件位于 `dist/generic/`。
+Shadowrocket 构建会获取上游配置、应用 `src/overrides.py` 的覆盖规格，并检查分组引用、分流规则和远程规则集，输出到 `dist/generic/`。Mihomo 生成器独立下载并校验上游原生 Clash 规则，输出到 `dist/mihomo/bundle.json`。
 
 ### 自定义分流规则
 
@@ -198,6 +199,20 @@ python3 scripts/build.py --audience generic --out-dir dist/generic
 省略 `modes` / `audiences` 表示适用于全部模式 / 通用及个人版。`modes` 可选 `select`、`fallback`、`hybrid`、`stable`，`audiences` 可选 `generic`、`personal`。速度组只存在于 fallback，稳定组只存在于 fallback/hybrid/stable；stable 模式不接受手动 PROXY 出口。引用不适用的组、无效语法或适用范围重叠的重复匹配条件会使构建失败，不会自动更换出口。更具体的例外应放在宽泛规则前面；清单顺序会原样保留。Karing 衍生配置也保留覆盖顺序，但稳定/手动出口对应其“当前选择”，不代表支持 Shadowrocket 的独立策略组。
 
 修改清单后运行测试和完整构建，再通过正常 CI 发布。规则会随主配置更新，外部规则集仍由客户端独立拉取；回退清单并重新发布即可撤销自定义变更。
+
+### Mihomo 原生规则包
+
+独立的 Mihomo CI 会发布 `mihomo/bundle.json`，供网关配置生成器使用；它不读取个人节点名单，也不会重建或覆盖 Shadowrocket、Karing 的发布文件。完整构建 CI 在个人名单通过新鲜度门槛时也会更新同一规则包：
+
+```text
+https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/mihomo/bundle.json
+```
+
+它是版本化的规则契约，不是可直接启动的完整 Mihomo 配置，也不包含节点、订阅地址或认证参数。`schema_version` 当前为 `1`；`upstream_commit` 固定本次构建使用的 blackmatrix7 提交；`rule_providers` 按顺序列出 Mihomo 的 HTTP / classical / YAML provider，每个 URL 都引用该不可变提交，并记录构建时验证内容的 `sha256`；`rules` 是最终匹配顺序；`policy_contract.required` 列出使用方必须定义的全部策略，`protected` 标明不能旁路的策略，另含末尾规则和缺组时必须拒绝的行为。使用方负责校验下载规则的 SHA-256，再注入自己的代理节点和策略组。
+
+自定义域名规则直接读取 `src/custom-rules.json`，不会解析 Shadowrocket 产物。网关包采用 personal + fallback 的适用范围；共享规则里的「稳定」映射到 `AI`，「速度」映射到 `PROXY`。自定义规则保持在最前，局域网和国内直连规则位于宽泛的 Global 规则之前，最后以 `MATCH,PROXY` 收口。使用方必须为 `policy_contract.protected` 中每个策略建立非空代理组；缺失或为空时绑定 `REJECT`，不能自动改为 `DIRECT`。
+
+生成器先解析 blackmatrix7 `master` 当前指向的完整 40 位提交，再从该提交逐个下载并检查 provider：响应必须成功、必须是含非空 `payload` 且不含 `MATCH` / `FINAL` 兜底项的 Clash YAML，并按下载原始字节计算 SHA-256。任一规则集失败时本次构建终止，release 分支继续保留上一版。较大的 Netflix、Apple、Global 和 ChinaMax 使用上游提供的完整 Classical 文件；ChinaMax 使用不含 IPv6 的完整文件，匹配当前 IPv4 网关用途。
 
 </details>
 

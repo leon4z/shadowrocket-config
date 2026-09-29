@@ -1,0 +1,91 @@
+name: publish-mihomo
+
+# Mihomo has no private node selection. Publish its validated rule bundle even
+# when the personal Shadowrocket selection is waiting for a fresh sample.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/custom-rules.json'
+      - 'scripts/render_mihomo.py'
+      - 'tests/test_render_mihomo.py'
+      - '.github/workflows/publish-mihomo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Serialize release writes with the existing full build workflow.
+concurrency:
+  group: build
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run generator tests
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+
+      - name: Validate native upstream rules and render bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/render_mihomo.py
+
+      - name: Publish only the Mihomo bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bundle="$GITHUB_WORKSPACE/dist/mihomo/bundle.json"
+          test -s "$bundle"
+          expected=$(sha256sum "$bundle" | cut -d' ' -f1)
+          out="$RUNNER_TEMP/mihomo-release"
+          mkdir -p "$out"
+          cd "$out"
+          git init -q
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          for attempt in 1 2 3; do
+            git -C "$GITHUB_WORKSPACE" fetch -q --depth 1 origin main
+            latest=$(git -C "$GITHUB_WORKSPACE" rev-parse FETCH_HEAD)
+            if [ "$latest" != "$GITHUB_SHA" ] && ! git -C "$GITHUB_WORKSPACE" diff --quiet "$GITHUB_SHA" "$latest" -- src/custom-rules.json scripts/render_mihomo.py tests/test_render_mihomo.py .github/workflows/publish-mihomo.yml; then
+              echo 'Mihomo inputs changed on main; skip stale bundle'
+              exit 0
+            fi
+            git fetch -q --force --depth 1 origin refs/heads/release:refs/remotes/origin/release
+            current=$(git show refs/remotes/origin/release:mihomo/bundle.json 2>/dev/null | sha256sum | cut -d' ' -f1) || current=''
+            if [ "$current" = "$expected" ]; then
+              echo "Mihomo bundle already published: $expected"
+              exit 0
+            fi
+            git checkout -q -B publish refs/remotes/origin/release
+            mkdir -p mihomo
+            cp "$bundle" mihomo/bundle.json
+            git add -- mihomo/bundle.json
+            git commit -q -m "build: validated Mihomo bundle ${GITHUB_SHA::7}"
+            git -C "$GITHUB_WORKSPACE" fetch -q --depth 1 origin main
+            latest=$(git -C "$GITHUB_WORKSPACE" rev-parse FETCH_HEAD)
+            if [ "$latest" != "$GITHUB_SHA" ] && ! git -C "$GITHUB_WORKSPACE" diff --quiet "$GITHUB_SHA" "$latest" -- src/custom-rules.json scripts/render_mihomo.py tests/test_render_mihomo.py .github/workflows/publish-mihomo.yml; then
+              echo 'Mihomo inputs changed before push; skip stale bundle'
+              exit 0
+            fi
+            if git push -q origin HEAD:refs/heads/release; then
+              echo "Mihomo bundle published: $expected"
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((5 * attempt))
+            fi
+          done
+          echo 'release changed during Mihomo publication; old bundle retained' >&2
+          exit 1
