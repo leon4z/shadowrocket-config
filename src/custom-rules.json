@@ -4,6 +4,10 @@
     "note": "Dia 账号及后端服务沿用 AI 分流；普通网页仍按各自域名匹配。"
   },
   {
+    "rule": "DOMAIN-SUFFIX,claude.dev,AI",
+    "note": "Claude 开发者网站沿用 AI 分流。"
+  },
+  {
     "rule": "DOMAIN-SUFFIX,cursor.com,AI",
     "note": "Cursor 网站及账号服务沿用 AI 分流。"
   },

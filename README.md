@@ -176,7 +176,7 @@ python3 scripts/build.py --audience generic --out-dir dist/generic
 
 ### 自定义分流规则
 
-在 `src/custom-rules.json` 集中维护域名覆盖规则。构建时按清单顺序写入主配置 `[Rule]` 开头，优先于上游分类规则集；无需另外导入模块或下载自定义规则 URL。当前包含 Dia 的 `diabrowser.engineering` 后端域名，以及 Cursor 的 `cursor.com`、`cursor.sh`、`cursorapi.com`、`cursor-cdn.com`、`cursorvm.com`，均使用 AI 分组。个人自动版、混合版和稳定版的 AI 分组使用稳定组；手动版仍跟随其 AI 分组当前选择。其他网页仍按各自域名匹配。规则命中不代表服务的地区限制已解除。
+在 `src/custom-rules.json` 集中维护域名覆盖规则。构建时按清单顺序写入主配置 `[Rule]` 开头，优先于上游分类规则集；无需另外导入模块或下载自定义规则 URL。当前包含 Dia 的 `diabrowser.engineering` 后端域名、Claude 开发者网站 `claude.dev`，以及 Cursor 的 `cursor.com`、`cursor.sh`、`cursorapi.com`、`cursor-cdn.com`、`cursorvm.com`，均使用 AI 分组。个人自动版、混合版和稳定版的 AI 分组使用稳定组；手动版仍跟随其 AI 分组当前选择。其他网页仍按各自域名匹配。规则命中不代表服务的地区限制已解除。
 
 每条记录须提供 `rule` 和单行用途 `note`。支持 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`DOMAIN-WILDCARD`，出口可选 `AI`、`稳定`、`速度`、`PROXY`、`DIRECT`。自定义规则的 `PROXY` 始终保留“跟随首页当前选择”的含义，不随生成模式改写。
 

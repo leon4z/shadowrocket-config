@@ -23,6 +23,7 @@ class CustomRulesTest(unittest.TestCase):
         rules = build.load_custom_rules(spec)
         expected = [
             'DOMAIN-SUFFIX,diabrowser.engineering,AI',
+            'DOMAIN-SUFFIX,claude.dev,AI',
             'DOMAIN-SUFFIX,cursor.com,AI',
             'DOMAIN-SUFFIX,cursor.sh,AI',
             'DOMAIN-SUFFIX,cursorapi.com,AI',
