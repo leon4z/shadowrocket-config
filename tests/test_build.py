@@ -51,6 +51,16 @@ def sections(variant):
 
 
 class BuildTest(unittest.TestCase):
+    def test_network_policy_is_shared_by_all_variants(self):
+        for variant in spec.VARIANTS:
+            with self.subTest(variant=variant['id']):
+                rendered = sections(variant)
+                text = "\n".join(rendered['general'])
+                for key, value in spec.GENERAL_OVERRIDES.items():
+                    self.assertIn(f'{key} = {value}', text)
+                rules = list(build.effective(rendered['rule']))
+                self.assertEqual(rules[:2], list(spec.NETWORK_RULES))
+
     def test_personal_filters_accept_only_the_two_traffic_label_spellings(self):
         names = ('日本-TY-4-HY2-流量倍率:0.6', '日本-TY-5-HY2-流量倍率:1')
         other = '🇺🇸 [Hy2]US 01'

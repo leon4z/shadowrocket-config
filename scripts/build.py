@@ -623,6 +623,7 @@ def transform(upstream: str, spec, variant: dict, selection: dict | None,
             section = s[1:-1].strip().lower()
             out.append(raw)
             if section == 'rule':
+                out.extend(getattr(spec, 'NETWORK_RULES', ()))
                 # These explicit policies must not undergo upstream PROXY substitution.
                 out.extend(render_custom_rules(custom_rules or [], variant))
             if section == "proxy group":

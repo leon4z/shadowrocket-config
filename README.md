@@ -221,3 +221,17 @@ https://raw.githubusercontent.com/leon4z/shadowrocket-config/release/mihomo/bund
 - [johnshall/Shadowrocket-ADBlock-Rules-Forever](https://github.com/johnshall/Shadowrocket-ADBlock-Rules-Forever)：配置骨架。
 - [blackmatrix7/ios_rule_script](https://github.com/blackmatrix7/ios_rule_script)：分类规则集。
 - [iab0x00/ProxyRules](https://github.com/iab0x00/ProxyRules)：AI 服务规则集。
+
+## 网络设置
+
+三份通用配置与四份个人配置采用相同的网络设置：
+
+- 禁用 IPv6；阻断所有 UDP 443（QUIC），支持回退的应用使用 TCP，其他 UDP 保留。
+- 拒绝域名包含 `stun` 的请求及 UDP 3478。此规则不是完整的 STUN 协议识别，语音通话、直播连麦等功能可能受影响。
+- 直连域名与代理节点解析使用国内 DoT；其他 DNS 使用 Cloudflare/Google DoH 并经代理查询。禁用系统 DNS 和直连失败转代理回退。
+- UDP 不受节点支持时拒绝请求；不自动直连。节点实际能力仍取决于订阅与服务端，不强制开启节点 UDP。
+- 局域网、时间同步和 Windows 连通性检测域名使用真实 IP 例外，其余保留小火箭默认虚拟 IP 行为。
+
+更新配置后，请在每台设备的小火箭「设置 → UDP」检查「启用转发」与「禁用 STUN」均已开启，首页「全局路由」选择「配置」。这些应用开关不随配置文件更新。已有节点的订阅更新独立于分流配置更新。
+
+上述设置一致，节点选择与分组模式仍按各配置原有设计区分。某些只支持 QUIC 的应用可能无法连接；静态校验不能代替实际应用验收。

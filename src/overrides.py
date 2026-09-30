@@ -113,6 +113,23 @@ GENERAL_OVERRIDES = {
     "ipv6": "false",
 }
 
+# Shared network policy for all Shadowrocket variants.
+GENERAL_OVERRIDES.update({
+    "block-quic": "all",
+    "udp-policy-not-supported-behaviour": "REJECT",
+    "dns-server": "https://1.1.1.1/dns-query#proxy,https://8.8.8.8/dns-query#proxy",
+    "direct-dns-server": "tls://223.5.5.5:853,tls://120.53.53.53:853",
+    "proxy-dns-server": "tls://223.5.5.5:853,tls://120.53.53.53:853",
+    "fallback-dns-server": "https://1.1.1.1/dns-query#proxy,https://8.8.8.8/dns-query#proxy",
+    "dns-direct-system": "false",
+    "dns-direct-fallback-proxy": "false",
+    "always-real-ip": "*.lan,*.local,localhost,pool.ntp.org,*.pool.ntp.org,time.*.com,ntp.*.com,msftconnecttest.com,msftncsi.com",
+})
+NETWORK_RULES = (
+    "DOMAIN-KEYWORD,stun,REJECT",
+    "AND,((PROTOCOL,UDP),(DST-PORT,3478)),REJECT-NO-DROP",
+)
+
 # --------------------------------------------------------------------------- #
 # 2. 分组调参
 # --------------------------------------------------------------------------- #
