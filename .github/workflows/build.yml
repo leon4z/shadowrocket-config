@@ -11,6 +11,11 @@ on:
       - 'tests/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
+    inputs:
+      reuse_published_selection:
+        description: '仅规则或代码变更：复用 release 已发布的相同节点清单，跳过两小时新鲜度限制'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -23,6 +28,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      REUSE_PUBLISHED_SELECTION: ${{ github.event_name == 'workflow_dispatch' && inputs.reuse_published_selection && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +40,19 @@ jobs:
       - name: 运行生成器单测
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
+      - name: 核对手动复用清单
+        if: env.REUSE_PUBLISHED_SELECTION == '1'
+        run: |
+          git fetch -q --depth 1 origin release:refs/remotes/origin/release
+          python3 scripts/check_selection_reuse.py
+
       - name: 校验远程规则集并生成配置
-        run: python3 scripts/build.py --require-fresh-selection --report dist/report.json
+        run: |
+          if [ "$REUSE_PUBLISHED_SELECTION" = '1' ]; then
+            python3 scripts/build.py --report dist/report.json
+          else
+            python3 scripts/build.py --require-fresh-selection --report dist/report.json
+          fi
 
       - name: 渲染 Karing 分流分组
         run: python3 scripts/render_karing.py
@@ -61,12 +79,17 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          python3 -B - <<'PY'
+          if [ "$REUSE_PUBLISHED_SELECTION" = '1' ]; then
+            git fetch -q --depth 1 origin release:refs/remotes/origin/release
+            python3 scripts/check_selection_reuse.py
+          else
+            python3 -B - <<'PY'
           import sys
           sys.path.insert(0, "scripts")
           import build
           build.check_selection_freshness(build.load_selection(build.load_spec()))
           PY
+          fi
           OUT="$RUNNER_TEMP/publish"
           mkdir -p "$OUT"
           cd "$OUT"
@@ -88,6 +111,7 @@ jobs:
           cp "$GITHUB_WORKSPACE"/dist/*.conf ./
           cp -R "$GITHUB_WORKSPACE"/dist/karing ./karing
           cp -R "$GITHUB_WORKSPACE"/dist/mihomo ./mihomo
+          python3 "$GITHUB_WORKSPACE/scripts/check_selection_reuse.py" --write ./selection.sha256
           git add -A
 
           if git diff --cached --quiet; then
