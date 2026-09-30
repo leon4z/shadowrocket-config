@@ -1,51 +1,47 @@
 {
   "version": 4,
   "mode": "rolling24h",
-  "generated_at": 1790744796,
-  "window_start": 1790657945,
-  "window_end": 1790744220,
-  "completed_runs": 56,
-  "selection_id": "8dc44aa40a35",
+  "generated_at": 1790810067,
+  "window_start": 1790723419,
+  "window_end": 1790809319,
+  "completed_runs": 64,
+  "selection_id": "034cddab0990",
   "groups": {
     "速度": {
-      "pattern": "(?i)^(?:中国香港\\-HK\\-1\\-流量倍率:0\\.7|中国香港\\-HK\\-2\\-AT\\-流量倍率:0\\.7|🇭🇰\\ \\[Hy2\\]HK\\ 02|🇭🇰HK高倍\\ 04\\ 3x流量|🇭🇰HK高倍\\ 05\\ 3x流量|🇭🇰Hong\\ Kong\\ 03|🇭🇰Hong\\ Kong\\ 04|🇭🇰Hong\\ Kong\\ 05|🇭🇰Hong\\ Kong\\ 06)$",
-      "node_count": 9
+      "pattern": "(?i)^(?:🇭🇰HK高倍\\ 03\\ 3x流量|🇭🇰HK高倍\\ 04\\ 3x流量|🇭🇰HK高倍\\ 05\\ 3x流量|🇭🇰Hong\\ Kong\\ 03|🇭🇰Hong\\ Kong\\ 04|🇭🇰Hong\\ Kong\\ 05|🇭🇰Hong\\ Kong\\ 06)$",
+      "node_count": 7
     },
     "香港节点": {
-      "pattern": "(?i)^(?:中国香港\\-HK\\-1\\-流量倍率:0\\.7|中国香港\\-HK\\-2\\-AT\\-流量倍率:0\\.7|🇭🇰\\ \\[Hy2\\]HK\\ 02|🇭🇰HK高倍\\ 04\\ 3x流量|🇭🇰HK高倍\\ 05\\ 3x流量|🇭🇰Hong\\ Kong\\ 03|🇭🇰Hong\\ Kong\\ 04|🇭🇰Hong\\ Kong\\ 05|🇭🇰Hong\\ Kong\\ 06)$",
-      "node_count": 9
+      "pattern": "(?i)^(?:🇭🇰HK高倍\\ 03\\ 3x流量|🇭🇰HK高倍\\ 04\\ 3x流量|🇭🇰HK高倍\\ 05\\ 3x流量|🇭🇰Hong\\ Kong\\ 03|🇭🇰Hong\\ Kong\\ 04|🇭🇰Hong\\ Kong\\ 05|🇭🇰Hong\\ Kong\\ 06)$",
+      "node_count": 7
     },
     "台湾节点": {
-      "pattern": "(?i)^(?:🇹🇼TW高倍\\ 03\\ 3x流量|🇹🇼Taiwan\\ 03|🇹🇼Taiwan\\ 04)$",
-      "node_count": 3
+      "pattern": "(?i)^(?:🇹🇼Taiwan\\ 03|🇹🇼Taiwan\\ 04)$",
+      "node_count": 2
     },
     "日本节点": {
-      "pattern": "(?i)^(?:日本\\-OS\\-1\\-流量倍率:0\\.6|日本\\-OS\\-2\\-流量倍率:0\\.6|日本\\-TY\\-2\\-流量倍率:1|日本\\-TY\\-4\\-AT\\-流量倍率:0\\.6|日本\\-TY\\-4\\-HY2\\-流量倍率:0\\.6|日本\\-TY\\-5\\-HY2\\-流量倍率:1|🇯🇵JP\\ 03|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02)$",
-      "node_count": 9
+      "pattern": "(?i)^(?:🇯🇵JP\\ 01|🇯🇵JP\\ 02|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02|🇯🇵Japan\\ 03|🇯🇵Japan\\ 04)$",
+      "node_count": 6
     },
     "新加坡节点": {
-      "pattern": "(?i)^(?:新加坡\\-SG\\-1\\-流量倍率:1|新加坡\\-SG\\-2\\-流量倍率:1|🇸🇬SG高倍\\ 04\\ 3x流量|🇸🇬SG高倍\\ 05\\ 3x流量|🇸🇬Singapore\\ 01|🇸🇬Singapore\\ 02|🇸🇬Singapore\\ 03|🇸🇬Singapore\\ 04)$",
-      "node_count": 8
+      "pattern": "(?i)^(?:🇸🇬SG\\ 01|🇸🇬SG高倍\\ 04\\ 3x流量|🇸🇬SG高倍\\ 06\\ 3x流量|🇸🇬Singapore\\ 01|🇸🇬Singapore\\ 02|🇸🇬Singapore\\ 03|🇸🇬Singapore\\ 04)$",
+      "node_count": 7
     },
     "美国节点": {
-      "pattern": "(?i)^(?:美国\\-US\\-1\\-流量倍率:1|美国\\-US\\-2\\-流量倍率:1|🇺🇸\\ \\[Hy2\\]US\\ 01|🇺🇸US\\ 01|🇺🇸US高倍\\ 03\\ 3x流量|🇺🇸United\\ States\\ 02|🇺🇸United\\ States\\ 03|🇺🇸United\\ States\\ 04)$",
-      "node_count": 8
+      "pattern": "(?i)^(?:🇺🇸\\ \\[Hy2\\]US\\ 01|🇺🇸US\\ 01|🇺🇸US高倍\\ 03\\ 3x流量|🇺🇸United\\ States\\ 02|🇺🇸United\\ States\\ 03|🇺🇸United\\ States\\ 04)$",
+      "node_count": 6
     },
     "英国节点": {
-      "pattern": "(?i)^(?:英国\\-UK\\-1\\-流量倍率:0\\.9|🇬🇧UK\\ 01|🇬🇧United\\ Kingdom\\ 01|🇬🇧United\\ Kingdom\\ 02)$",
+      "pattern": "(?i)^(?:🇬🇧UK\\ 01|🇬🇧UK\\ 02|🇬🇧United\\ Kingdom\\ 01|🇬🇧United\\ Kingdom\\ 02)$",
       "node_count": 4
     },
     "德国节点": {
-      "pattern": "(?i)^(?:德国\\-DE\\-2\\-流量倍率:1|德国\\-DE\\-3\\-流量倍率:1|🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
-      "node_count": 5
+      "pattern": "(?i)^(?:🇩🇪DE\\ 01|🇩🇪Germany\\ 01|🇩🇪Germany\\ 02)$",
+      "node_count": 3
     },
     "韩国节点": {
-      "pattern": "(?i)^(?:🇰🇷Korea\\ 01|🇰🇷Korea\\ 02)$",
-      "node_count": 2
-    },
-    "澳大利亚节点": {
-      "pattern": "(?i)^(?:澳大利亚\\-AU\\-1\\-流量倍率:1\\.6|澳大利亚\\-AU\\-2\\-流量倍率:1\\.4|澳大利亚\\-AU\\-3\\-流量倍率:2)$",
-      "node_count": 3
+      "pattern": "(?i)^(?:🇰🇷KR\\ 01|🇰🇷KR\\ 02|🇰🇷Korea\\ 01|🇰🇷Korea\\ 02)$",
+      "node_count": 4
     },
     "马来西亚节点": {
       "pattern": "(?i)^(?:🇲🇾Malaysia\\ 01|🇲🇾Malaysia\\ 02)$",
@@ -60,65 +56,55 @@
       "node_count": 1
     },
     "荷兰节点": {
-      "pattern": "(?i)^(?:荷兰\\-NL\\-1\\-流量倍率:0\\.5|🇳🇱Netherlands\\ 01|🇳🇱Netherlands\\ 02)$",
-      "node_count": 3
-    },
-    "土耳其节点": {
-      "pattern": "(?i)^(?:🇹🇷TR\\ 01)$",
+      "pattern": "(?i)^(?:🇳🇱Netherlands\\ 02)$",
       "node_count": 1
     },
     "泰国节点": {
-      "pattern": "(?i)^(?:🇹🇭TH高倍\\ 02\\ 3x流量)$",
-      "node_count": 1
-    },
-    "爱沙尼亚节点": {
-      "pattern": "(?i)^(?:爱沙尼亚\\-EE\\-1\\-流量倍率:0\\.2)$",
-      "node_count": 1
+      "pattern": "(?i)^(?:🇹🇭TH\\ 01|🇹🇭TH高倍\\ 02\\ 3x流量)$",
+      "node_count": 2
     }
   },
-  "upstream_commit": "2426718647e022c91ed6a72a5dbecef36ef1e260",
-  "upstream_run_id": 36643153826,
+  "upstream_commit": "2b1461db10b540f856b69a9794aec3509e557d73",
+  "upstream_run_id": 36789103088,
   "speed_country": "香港",
   "speed_order": [
-    "🇭🇰HK高倍 04 3x流量",
+    "🇭🇰HK高倍 03 3x流量",
     "🇭🇰HK高倍 05 3x流量",
+    "🇭🇰HK高倍 04 3x流量",
     "🇭🇰Hong Kong 05",
-    "🇭🇰Hong Kong 04",
     "🇭🇰Hong Kong 03",
     "🇭🇰Hong Kong 06",
-    "中国香港-HK-1-流量倍率:0.7",
-    "中国香港-HK-2-AT-流量倍率:0.7",
-    "🇭🇰 [Hy2]HK 02"
+    "🇭🇰Hong Kong 04"
   ],
   "services": {
     "YouTube": {
       "country": "日本",
-      "pattern": "(?i)^(?:日本\\-OS\\-2\\-流量倍率:0\\.6|日本\\-TY\\-2\\-流量倍率:1|日本\\-TY\\-4\\-AT\\-流量倍率:0\\.6|日本\\-TY\\-4\\-HY2\\-流量倍率:0\\.6|日本\\-TY\\-5\\-HY2\\-流量倍率:1|🇯🇵JP\\ 03|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02)$",
-      "node_count": 8,
+      "pattern": "(?i)^(?:🇯🇵JP\\ 01|🇯🇵JP\\ 02|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02|🇯🇵Japan\\ 03|🇯🇵Japan\\ 04)$",
+      "node_count": 6,
       "probe_level": "web_entry"
     },
     "Disney+": {
       "country": "美国",
-      "pattern": "(?i)^(?:🇺🇸\\ \\[Hy2\\]US\\ 01|🇺🇸US高倍\\ 03\\ 3x流量|🇺🇸United\\ States\\ 03|🇺🇸United\\ States\\ 04)$",
-      "node_count": 4,
+      "pattern": "(?i)^(?:🇺🇸\\ \\[Hy2\\]US\\ 01|🇺🇸US高倍\\ 03\\ 3x流量|🇺🇸United\\ States\\ 02|🇺🇸United\\ States\\ 03|🇺🇸United\\ States\\ 04)$",
+      "node_count": 5,
       "probe_level": "web_entry"
     },
     "TikTok": {
       "country": "日本",
-      "pattern": "(?i)^(?:日本\\-OS\\-2\\-流量倍率:0\\.6|日本\\-TY\\-2\\-流量倍率:1|日本\\-TY\\-4\\-AT\\-流量倍率:0\\.6|日本\\-TY\\-4\\-HY2\\-流量倍率:0\\.6|日本\\-TY\\-5\\-HY2\\-流量倍率:1|🇯🇵JP\\ 03|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02)$",
-      "node_count": 8,
+      "pattern": "(?i)^(?:🇯🇵JP\\ 01|🇯🇵JP\\ 02|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02|🇯🇵Japan\\ 03|🇯🇵Japan\\ 04)$",
+      "node_count": 6,
       "probe_level": "web_entry"
     },
     "Twitter": {
       "country": "日本",
-      "pattern": "(?i)^(?:日本\\-OS\\-1\\-流量倍率:0\\.6|日本\\-OS\\-2\\-流量倍率:0\\.6|日本\\-TY\\-2\\-流量倍率:1|日本\\-TY\\-4\\-AT\\-流量倍率:0\\.6|日本\\-TY\\-4\\-HY2\\-流量倍率:0\\.6|日本\\-TY\\-5\\-HY2\\-流量倍率:1|🇯🇵JP\\ 03|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02)$",
-      "node_count": 9,
+      "pattern": "(?i)^(?:🇯🇵JP\\ 01|🇯🇵JP\\ 02|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02|🇯🇵Japan\\ 03|🇯🇵Japan\\ 04)$",
+      "node_count": 6,
       "probe_level": "web_entry"
     },
     "Facebook": {
       "country": "日本",
-      "pattern": "(?i)^(?:日本\\-OS\\-2\\-流量倍率:0\\.6|日本\\-TY\\-2\\-流量倍率:1|日本\\-TY\\-4\\-AT\\-流量倍率:0\\.6|日本\\-TY\\-4\\-HY2\\-流量倍率:0\\.6|日本\\-TY\\-5\\-HY2\\-流量倍率:1|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02)$",
-      "node_count": 7,
+      "pattern": "(?i)^(?:🇯🇵JP\\ 01|🇯🇵JP\\ 02|🇯🇵Japan\\ 01|🇯🇵Japan\\ 02|🇯🇵Japan\\ 03|🇯🇵Japan\\ 04)$",
+      "node_count": 6,
       "probe_level": "web_entry"
     }
   }
